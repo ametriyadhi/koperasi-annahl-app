@@ -4,7 +4,8 @@ import { db } from '../firebase';
 import type { Anggota } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
-import MemberForm from './MemberForm'; // Impor komponen form baru
+import MemberForm from './MemberForm';
+import MemberImporter from './MemberImporter'; // <-- Impor komponen baru
 import { PlusCircleIcon } from './icons';
 
 const formatCurrency = (value: number) => {
@@ -14,10 +15,10 @@ const formatCurrency = (value: number) => {
 const Members: React.FC = () => {
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false); // <-- State untuk modal import
   const [editingAnggota, setEditingAnggota] = useState<Anggota | null>(null);
 
-  // Menggunakan onSnapshot untuk data real-time
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "anggota"), (querySnapshot) => {
       const membersData = querySnapshot.docs.map(doc => ({
@@ -30,41 +31,38 @@ const Members: React.FC = () => {
       console.error("Error listening to members collection: ", error);
       setLoading(false);
     });
-
-    // Membersihkan listener saat komponen tidak lagi digunakan
     return () => unsubscribe();
   }, []);
 
-  const handleOpenModal = (anggota: Anggota | null = null) => {
+  const handleOpenFormModal = (anggota: Anggota | null = null) => {
     setEditingAnggota(anggota);
-    setIsModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
-  const handleCloseModal = () => {
-    setIsModalOpen(false);
+  const handleCloseFormModal = () => {
+    setIsFormModalOpen(false);
     setEditingAnggota(null);
+  };
+  
+  const handleCloseImportModal = () => {
+      setIsImportModalOpen(false);
   };
 
   const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>) => {
     try {
       if (editingAnggota) {
-        // Update anggota yang sudah ada
         const docRef = doc(db, "anggota", editingAnggota.id);
         await updateDoc(docRef, anggotaData);
       } else {
-        // Tambah anggota baru
         await addDoc(collection(db, "anggota"), anggotaData);
       }
-      handleCloseModal();
+      handleCloseFormModal();
     } catch (error) {
       console.error("Error saving member: ", error);
-      // Tampilkan notifikasi error
     }
   };
 
   const handleDeleteAnggota = async (id: string) => {
-    // Tampilkan konfirmasi sebelum menghapus
-    // Di lingkungan produksi, gunakan modal custom, bukan window.confirm
     if (confirm("Apakah Anda yakin ingin menghapus anggota ini?")) {
       try {
         await deleteDoc(doc(db, "anggota", id));
@@ -82,10 +80,15 @@ const Members: React.FC = () => {
             <h3 className="text-lg font-semibold text-gray-800">Daftar Anggota Koperasi</h3>
             <p className="text-sm text-gray-600">Data terhubung langsung ke database Firestore.</p>
           </div>
-          <button onClick={() => handleOpenModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-lime-600">
-            <PlusCircleIcon className="w-5 h-5 mr-2" />
-            Tambah Anggota
-          </button>
+          <div className="flex space-x-2">
+            <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
+                Import CSV
+            </button>
+            <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-lime-600">
+              <PlusCircleIcon className="w-5 h-5 mr-2" />
+              Tambah Anggota
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -112,7 +115,7 @@ const Members: React.FC = () => {
                       {formatCurrency((member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0))}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button onClick={() => handleOpenModal(member)} className="text-primary hover:text-amber-600">Edit</button>
+                      <button onClick={() => handleOpenFormModal(member)} className="text-primary hover:text-amber-600">Edit</button>
                       <button onClick={() => handleDeleteAnggota(member.id)} className="text-red-600 hover:text-red-800">Hapus</button>
                     </td>
                   </tr>
@@ -123,12 +126,16 @@ const Members: React.FC = () => {
         )}
       </Card>
 
-      <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingAnggota ? 'Edit Anggota' : 'Tambah Anggota Baru'}>
+      <Modal isOpen={isFormModalOpen} onClose={handleCloseFormModal} title={editingAnggota ? 'Edit Anggota' : 'Tambah Anggota Baru'}>
         <MemberForm 
           onSave={handleSaveAnggota}
-          onClose={handleCloseModal}
+          onClose={handleCloseFormModal}
           initialData={editingAnggota}
         />
+      </Modal>
+      
+      <Modal isOpen={isImportModalOpen} onClose={handleCloseImportModal} title="Impor Anggota dari CSV">
+        <MemberImporter onClose={handleCloseImportModal} onImportSuccess={handleCloseImportModal} />
       </Modal>
     </>
   );
