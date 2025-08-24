@@ -4,12 +4,13 @@ import Dashboard from './components/Dashboard';
 import Members from './components/Members';
 import Savings from './components/Savings';
 import Murabahah from './components/Murabahah';
+import MurabahahSimulator from './components/Simulator'; // <-- Impor komponen baru
 import Accounting from './components/Accounting';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import { MenuIcon } from './components/icons';
 
-type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
+type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
@@ -29,6 +30,8 @@ const App: React.FC = () => {
         return <Savings />;
       case 'Murabahah':
         return <Murabahah />;
+      case 'Simulator': // <-- Tambahkan case baru
+        return <MurabahahSimulator />;
       case 'Akuntansi':
         return <Accounting />;
       case 'Laporan':
@@ -54,7 +57,6 @@ const App: React.FC = () => {
                     <MenuIcon className="w-6 h-6" />
                 </button>
             </div>
-             {/* Can add user profile / other header items here later */}
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
           <div className="max-w-7xl mx-auto">
