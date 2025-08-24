@@ -1,10 +1,7 @@
 import React from 'react';
-// Tambahkan ikon baru, misalnya CalculatorIcon atau sejenisnya jika ada di icons.tsx
-// Untuk sekarang kita gunakan ChartIcon sebagai placeholder
 import { HomeIcon, UsersIcon, WalletIcon, HandshakeIcon, BookIcon, ChartIcon, SettingsIcon, LogoIcon } from './icons';
 
-// Tambahkan 'Simulator' ke tipe ViewType
-type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
+type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
 interface SidebarProps {
   activeView: ViewType;
@@ -17,13 +14,15 @@ const navItems = [
   { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota' },
   { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan' },
   { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah' },
-  { name: 'Simulator', icon: ChartIcon, view: 'Simulator' }, // <-- MENU BARU
+  { name: 'Simulator', icon: ChartIcon, view: 'Simulator' },
+  { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan' }, // <-- MENU BARU
   { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi' },
   { name: 'Laporan', icon: ChartIcon, view: 'Laporan' },
   { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan' },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
+  // ... (sisa kode Sidebar.tsx tetap sama, tidak perlu diubah)
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
       <div className={`h-20 flex items-center justify-center border-b bg-primary text-white`}>
@@ -61,3 +60,4 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
