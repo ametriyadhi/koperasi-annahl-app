@@ -5,7 +5,10 @@ import type { Akun } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import AccountForm from './AccountForm';
+import JurnalUmum from './JurnalUmum'; // Impor komponen Jurnal
 import { PlusCircleIcon } from './icons';
+
+type AccountingTab = 'Bagan Akun' | 'Jurnal Umum';
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -13,7 +16,7 @@ const formatCurrency = (value: number) => {
 
 const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => void, onDelete: (id: string) => void }> = ({ akun, level, onEdit, onDelete }) => {
     const isParent = !akun.parent_kode;
-    const paddingLeft = level * 20 + 24; // 24px base padding
+    const paddingLeft = level * 20 + 24;
 
     return (
         <tr className={isParent ? "bg-gray-100" : "hover:bg-gray-50"}>
@@ -40,6 +43,7 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
 };
 
 const Accounting: React.FC = () => {
+    const [activeTab, setActiveTab] = useState<AccountingTab>('Bagan Akun');
     const [accounts, setAccounts] = useState<Akun[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,7 +52,6 @@ const Accounting: React.FC = () => {
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "chart_of_accounts"), (snapshot) => {
             const fetchedAccounts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Akun));
-            // Urutkan berdasarkan kode akun
             fetchedAccounts.sort((a, b) => a.kode.localeCompare(b.kode));
             setAccounts(fetchedAccounts);
             setLoading(false);
@@ -98,34 +101,63 @@ const Accounting: React.FC = () => {
                 ...renderAccounts(akun.kode, level + 1)
             ]);
     };
-    
+
     return (
         <>
-            <Card>
-                 <div className="flex justify-between items-center p-4 sm:p-6 border-b">
-                    <h3 className="text-lg font-semibold text-gray-800">Bagan Akun (Chart of Accounts)</h3>
-                    <button onClick={() => handleOpenModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
-                        <PlusCircleIcon className="w-5 h-5 mr-2" />
-                        Tambah Akun
-                    </button>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                        <thead className="bg-gray-50 border-b">
-                            <tr>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode Akun</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Akun</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
-                                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
-                            </tr>
-                        </thead>
-                        <tbody className="bg-white">
-                            {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderAccounts()}
-                        </tbody>
-                    </table>
-                </div>
-            </Card>
+            <div className="mb-6 border-b border-gray-200">
+                <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                    {(['Bagan Akun', 'Jurnal Umum'] as AccountingTab[]).map((tab) => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`shrink-0 ${
+                                activeTab === tab
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                        >
+                            {tab}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {activeTab === 'Bagan Akun' && (
+                <Card>
+                    <div className="flex justify-between items-center p-4 sm:p-6 border-b">
+                        <h3 className="text-lg font-semibold text-gray-800">Bagan Akun (Chart of Accounts)</h3>
+                        <button onClick={() => handleOpenModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                            <PlusCircleIcon className="w-5 h-5 mr-2" />
+                            Tambah Akun
+                        </button>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead className="bg-gray-50 border-b">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode Akun</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Akun</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white">
+                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderAccounts()}
+                            </tbody>
+                        </table>
+                    </div>
+                </Card>
+            )}
+
+            {activeTab === 'Jurnal Umum' && (
+                <Card title="Jurnal Umum">
+                    <div className="p-6">
+                        <JurnalUmum />
+                    </div>
+                </Card>
+            )}
+
             <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingAccount ? 'Edit Akun' : 'Tambah Akun Baru'}>
                 <AccountForm 
                     onSave={handleSaveAccount}
@@ -139,3 +171,4 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
