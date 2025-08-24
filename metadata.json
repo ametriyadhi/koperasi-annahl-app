@@ -1,0 +1,5 @@
+{
+  "name": "Koperasi Karyawan An Nahl",
+  "description": "A web application for managing the An Nahl Islamic School employee cooperative, including membership, savings, and murabahah financing, based on Sharia principles.",
+  "requestFramePermissions": []
+}
