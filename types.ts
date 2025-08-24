@@ -25,19 +25,11 @@ export enum JenisSimpanan {
   SUKARELA = 'Simpanan Sukarela',
 }
 
-export interface RekeningSimpanan {
+export interface TransaksiSimpanan {
   id: string;
   anggota_id: string;
   jenis: JenisSimpanan;
-  saldo: number;
-}
-
-// DEFINISI TRANSAKSI DIPERBARUI DI SINI
-export interface TransaksiSimpanan {
-  id: string; // Disediakan oleh Firestore
-  anggota_id: string;
-  jenis: JenisSimpanan;
-  tanggal: string; // Disimpan sebagai ISO string
+  tanggal: string;
   tipe: 'Setor' | 'Tarik';
   jumlah: number;
   keterangan: string;
@@ -61,10 +53,11 @@ export interface KontrakMurabahah {
   margin: number;
   harga_jual: number;
   uang_muka: number;
-  tenor: number; // in months
+  tenor: number;
   cicilan_per_bulan: number;
   tanggal_akad: string;
   status: StatusKontrak;
+  cicilan_terbayar: number; // <-- FIELD BARU UNTUK MELACAK CICILAN
 }
 
 export enum AkunTipe {
@@ -82,4 +75,22 @@ export interface Akun {
   parent_kode?: string;
   saldo: number;
 }
+
+// Tipe data untuk baris laporan yang akan disimpan
+export interface ReportRow {
+  nip: string;
+  nama: string;
+  simpananWajib: number;
+  cicilanMurabahah: number;
+  totalPotongan: number;
+}
+
+// TIPE DATA BARU UNTUK ARSIP LAPORAN DI FIRESTORE
+export interface LaporanArsip {
+    id: string;
+    namaLaporan: string;
+    tanggalDibuat: string; // ISO string
+    dataLaporan: ReportRow[]; // Menyimpan seluruh data laporan
+}
+
 
