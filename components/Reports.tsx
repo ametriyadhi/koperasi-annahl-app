@@ -1,85 +1,77 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase';
+import type { LaporanArsip, ReportRow } from '../types';
 import Card from './shared/Card';
-import { CHART_OF_ACCOUNTS } from '../constants';
-import { AkunTipe } from '../types';
-import AutodebetGenerator from './AutodebetGenerator'; // Impor komponen baru kita
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
-}
-
-const ReportRow: React.FC<{ label: string, value: number, isTotal?: boolean, indent?: boolean }> = ({ label, value, isTotal = false, indent = false }) => (
-    <div className={`flex justify-between py-2 ${isTotal ? 'font-bold border-t mt-2 pt-2' : ''} ${indent ? 'pl-4' : ''}`}>
-        <p className={`text-sm ${isTotal ? 'text-gray-800' : 'text-gray-600'}`}>{label}</p>
-        <p className={`text-sm font-medium ${isTotal ? 'text-gray-900' : 'text-gray-700'}`}>{formatCurrency(value)}</p>
-    </div>
-);
+};
 
 const Reports: React.FC = () => {
-    // Logika untuk Laporan Keuangan (masih statis)
-    const aset = CHART_OF_ACCOUNTS.filter(a => a.tipe === AkunTipe.ASET && a.parent_kode);
-    const totalAset = aset.reduce((sum, a) => sum + a.saldo, 0);
-    const liabilitas = CHART_OF_ACCOUNTS.filter(a => a.tipe === AkunTipe.LIABILITAS && a.parent_kode);
-    const totalLiabilitas = liabilitas.reduce((sum, a) => sum + a.saldo, 0);
-    const ekuitas = CHART_OF_ACCOUNTS.filter(a => a.tipe === AkunTipe.EKUITAS && a.parent_kode);
-    const totalEkuitas = ekuitas.reduce((sum, a) => sum + a.saldo, 0);
-    const totalLiabilitasEkuitas = totalLiabilitas + totalEkuitas;
-    const pendapatan = CHART_OF_ACCOUNTS.filter(a => a.tipe === AkunTipe.PENDAPATAN && a.parent_kode);
-    const totalPendapatan = pendapatan.reduce((sum, a) => sum + a.saldo, 0);
-    const beban = CHART_OF_ACCOUNTS.filter(a => a.tipe === AkunTipe.BEBAN && a.parent_kode);
-    const totalBeban = beban.reduce((sum, a) => sum + a.saldo, 0);
-    const labaRugi = totalPendapatan - totalBeban;
+    const [arsipList, setArsipList] = useState<LaporanArsip[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(collection(db, "laporan_arsip"), (snapshot) => {
+            const archives = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaporanArsip));
+            archives.sort((a, b) => new Date(b.tanggalDibuat).getTime() - new Date(a.tanggalDibuat).getTime());
+            setArsipList(archives);
+            setLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const exportToCsv = (laporan: LaporanArsip) => {
+        const headers = ['NIP', 'Nama Anggota', 'Simpanan Wajib', 'Cicilan Murabahah', 'Total Potongan'];
+        const csvRows = [
+            headers.join(','),
+            ...laporan.dataLaporan.map(row => 
+                [row.nip, `"${row.nama}"`, row.simpananWajib, row.cicilanMurabahah, row.totalPotongan].join(',')
+            )
+        ];
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const fileName = `${laporan.namaLaporan.replace(/ /g, '_')}.csv`;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
     return (
         <div>
             <h2 className="text-3xl font-bold text-gray-800 mb-6">Laporan</h2>
             
-            {/* Bagian Baru: Generator Laporan Autodebet */}
-            <Card className="mb-8">
+            <Card title="Arsip Laporan Autodebet">
                 <div className="p-6">
-                    <AutodebetGenerator />
+                    {loading ? <p>Memuat arsip...</p> : (
+                        <ul className="divide-y divide-gray-200">
+                            {arsipList.map(arsip => (
+                                <li key={arsip.id} className="py-3 flex justify-between items-center">
+                                    <div>
+                                        <p className="text-sm font-medium text-gray-900">{arsip.namaLaporan}</p>
+                                        <p className="text-xs text-gray-500">
+                                            Dibuat pada: {new Date(arsip.tanggalDibuat).toLocaleString('id-ID')}
+                                        </p>
+                                    </div>
+                                    <button onClick={() => exportToCsv(arsip)} className="text-sm font-medium text-primary hover:underline">
+                                        Unduh CSV
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    {!loading && arsipList.length === 0 && <p className="text-sm text-gray-500">Belum ada laporan yang diarsipkan.</p>}
                 </div>
             </Card>
-
-            <h3 className="text-2xl font-bold text-gray-800 mb-4">Laporan Keuangan (Data Statis)</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <Card title="Neraca (Balance Sheet)">
-                    <div className="space-y-4">
-                        <div>
-                            <h4 className="font-semibold text-md text-gray-800 mb-2">Aset</h4>
-                            {aset.map(a => <ReportRow key={a.kode} label={a.nama} value={a.saldo} indent />)}
-                            <ReportRow label="Total Aset" value={totalAset} isTotal />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-md text-gray-800 mb-2 mt-4">Liabilitas & Ekuitas</h4>
-                            {liabilitas.map(a => <ReportRow key={a.kode} label={a.nama} value={a.saldo} indent />)}
-                            {ekuitas.map(a => <ReportRow key={a.kode} label={a.nama} value={a.saldo} indent />)}
-                            <ReportRow label="Total Liabilitas & Ekuitas" value={totalLiabilitasEkuitas} isTotal />
-                        </div>
-                    </div>
-                </Card>
-
-                <Card title="Laporan Laba Rugi (Income Statement)">
-                    <div className="space-y-4">
-                        <div>
-                            <h4 className="font-semibold text-md text-gray-800 mb-2">Pendapatan</h4>
-                            {pendapatan.map(a => <ReportRow key={a.kode} label={a.nama} value={a.saldo} indent/>)}
-                            <ReportRow label="Total Pendapatan" value={totalPendapatan} isTotal />
-                        </div>
-                        <div>
-                            <h4 className="font-semibold text-md text-gray-800 mb-2 mt-4">Beban</h4>
-                            {beban.map(a => <ReportRow key={a.kode} label={a.nama} value={a.saldo} indent/>)}
-                            <ReportRow label="Total Beban" value={totalBeban} isTotal />
-                        </div>
-                         <div>
-                            <ReportRow label="Sisa Hasil Usaha (SHU)" value={labaRugi} isTotal />
-                        </div>
-                    </div>
-                </Card>
-            </div>
         </div>
     );
 };
 
 export default Reports;
+
 
