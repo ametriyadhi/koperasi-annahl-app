@@ -87,7 +87,6 @@ const MurabahahSimulator: React.FC = () => {
 
     return (
         <Card>
-            {/* --- PERBAIKAN DI SINI: Menambahkan div dengan padding --- */}
             <div className="p-6 md:p-10">
                 <div className="text-center mb-8">
                     <h1 className="text-2xl md:text-3xl font-bold text-primary">Simulasi Kredit Murabahah</h1>
@@ -95,7 +94,6 @@ const MurabahahSimulator: React.FC = () => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* ... sisa form tetap sama ... */}
                     <div>
                         <label htmlFor="gaji" className="block text-sm font-medium mb-2">Gaji Perbulan (Rp)</label>
                         <input type="number" id="gaji" value={inputs.gaji} onChange={handleInputChange} placeholder="Contoh: 5000000" className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg" />
@@ -128,7 +126,36 @@ const MurabahahSimulator: React.FC = () => {
                 
                 {result && (
                     <div className="mt-10 p-6 rounded-lg bg-gray-50">
-                        {/* ... sisa hasil simulasi tetap sama ... */}
+                        <h2 className="text-xl font-bold mb-4 text-center">{result.isApproved ? 'Hasil Simulasi - Disetujui' : 'Hasil Simulasi - Ditolak'}</h2>
+                        <div className="space-y-3">
+                            <div className={`flex justify-between items-center p-3 rounded-lg ${result.isApproved ? 'bg-green-100' : 'bg-red-100'}`}>
+                                <span className="font-semibold">Status Kelayakan</span>
+                                <span className={`font-bold text-lg ${result.isApproved ? 'text-green-600' : 'text-red-600'}`}>{result.isApproved ? 'DISETUJUI' : 'DITOLAK'}</span>
+                            </div>
+                            {!result.isApproved && (
+                                <div className="p-3 rounded-lg bg-red-100 text-red-700">
+                                    <p className="font-semibold">Alasan Penolakan:</p>
+                                    <p>{result.rejectionReason}</p>
+                                </div>
+                            )}
+                            <div className="border-t pt-4 mt-4">
+                                <h3 className="font-semibold text-lg mb-2 text-center">Rincian Perhitungan</h3>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between"><span>Harga Barang</span><span>{formatCurrency(result.hargaBarang)}</span></div>
+                                    <div className="flex justify-between"><span>Margin Koperasi ({result.marginPersen * 100}%)</span><span>{formatCurrency(result.marginRupiah)}</span></div>
+                                    <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Harga Jual Koperasi</span><span>{formatCurrency(result.totalHutang)}</span></div>
+                                    <div className="flex justify-between text-primary font-bold text-lg mt-2"><span>Cicilan Per Bulan</span><span>{formatCurrency(result.cicilanBaru)}</span></div>
+                                </div>
+                            </div>
+                            <div className="border-t pt-4 mt-4">
+                                <h3 className="font-semibold text-lg mb-2 text-center">Analisis Kelayakan</h3>
+                                <div className="space-y-2">
+                                    <div className="flex justify-between"><span>Maks. Harga Barang (5x Gaji)</span><span>{formatCurrency(result.maxHargaBarang)}</span></div>
+                                    <div className="flex justify-between"><span>Maks. Cicilan Per Bulan (1/3 Gaji)</span><span>{formatCurrency(result.maxCicilanBulanan)}</span></div>
+                                    <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Total Cicilan Baru + Lama</span><span>{formatCurrency(result.totalCicilanBulanan)}</span></div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )}
             </div>
@@ -137,4 +164,5 @@ const MurabahahSimulator: React.FC = () => {
 };
 
 export default MurabahahSimulator;
+
 
