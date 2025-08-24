@@ -12,10 +12,12 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 };
 
+// --- PERBAIKAN DI SINI: Menambahkan StatusKontrak.AKAD ---
 const tabs = [
     StatusKontrak.BERJALAN,
     StatusKontrak.REVIEW,
     StatusKontrak.APPROVED,
+    StatusKontrak.AKAD,
     StatusKontrak.LUNAS,
     StatusKontrak.MACET,
 ];
@@ -158,4 +160,5 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
