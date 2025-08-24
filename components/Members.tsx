@@ -5,7 +5,7 @@ import type { Anggota } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import MemberForm from './MemberForm'; // Impor komponen form baru
-import { PlusCircleIcon, TrashIcon } from './icons';
+import { PlusCircleIcon } from './icons';
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -64,7 +64,8 @@ const Members: React.FC = () => {
 
   const handleDeleteAnggota = async (id: string) => {
     // Tampilkan konfirmasi sebelum menghapus
-    if (window.confirm("Apakah Anda yakin ingin menghapus anggota ini?")) {
+    // Di lingkungan produksi, gunakan modal custom, bukan window.confirm
+    if (confirm("Apakah Anda yakin ingin menghapus anggota ini?")) {
       try {
         await deleteDoc(doc(db, "anggota", id));
       } catch (error) {
@@ -97,6 +98,7 @@ const Members: React.FC = () => {
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">NIP</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Unit</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Simpanan</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
                 </tr>
               </thead>
@@ -106,6 +108,9 @@ const Members: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{member.nama}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.nip}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.unit}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">
+                      {formatCurrency((member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0))}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                       <button onClick={() => handleOpenModal(member)} className="text-primary hover:text-amber-600">Edit</button>
                       <button onClick={() => handleDeleteAnggota(member.id)} className="text-red-600 hover:text-red-800">Hapus</button>
@@ -130,5 +135,3 @@ const Members: React.FC = () => {
 };
 
 export default Members;
-
-
