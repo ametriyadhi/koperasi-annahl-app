@@ -1,7 +1,7 @@
-
-import React from 'react';
-import { MOCK_ANGGOTA } from '../constants';
-import { Unit } from '../types';
+import React, { useState, useEffect } from 'react';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../firebase'; // Impor koneksi database kita
+import type { Anggota } from '../types';
 import Card from './shared/Card';
 
 const formatCurrency = (value: number) => {
@@ -9,11 +9,42 @@ const formatCurrency = (value: number) => {
 }
 
 const Members: React.FC = () => {
+  // State untuk menyimpan daftar anggota dari Firestore
+  const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+  // State untuk menunjukkan status loading
+  const [loading, setLoading] = useState<boolean>(true);
+
+  // useEffect akan berjalan sekali saat komponen pertama kali dimuat
+  useEffect(() => {
+    const fetchAnggota = async () => {
+      try {
+        // Mengambil data dari koleksi 'anggota' di Firestore
+        const querySnapshot = await getDocs(collection(db, "anggota"));
+        const membersData = querySnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })) as Anggota[];
+        
+        setAnggotaList(membersData); // Simpan data ke state
+      } catch (error) {
+        console.error("Error fetching members: ", error);
+        // Di aplikasi nyata, kita akan menampilkan pesan error ke pengguna
+      } finally {
+        setLoading(false); // Hentikan loading
+      }
+    };
+
+    fetchAnggota();
+  }, []); // Array dependensi kosong berarti efek ini hanya berjalan sekali
+
+  if (loading) {
+    return <Card title="Daftar Anggota Koperasi"><p>Memuat data anggota...</p></Card>;
+  }
+
   return (
     <Card title="Daftar Anggota Koperasi">
         <div className="mb-4">
-            {/* TODO: Add filtering functionality */}
-            <p className="text-sm text-gray-600">Daftar semua anggota terdaftar di Koperasi An Nahl.</p>
+            <p className="text-sm text-gray-600">Daftar semua anggota terdaftar di Koperasi An Nahl (Data dari Firestore).</p>
         </div>
         <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -28,7 +59,7 @@ const Members: React.FC = () => {
                     </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                    {MOCK_ANGGOTA.map((member) => (
+                    {anggotaList.map((member) => (
                         <tr key={member.id} className="hover:bg-gray-50">
                             <td className="px-6 py-4 whitespace-nowrap">
                                 <div className="text-sm font-medium text-gray-900">{member.nama}</div>
@@ -56,3 +87,4 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
