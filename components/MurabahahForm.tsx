@@ -23,6 +23,18 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     tanggal_akad: initialData?.tanggal_akad || new Date().toISOString().split('T')[0],
     status: initialData?.status || StatusKontrak.REVIEW,
   });
+  
+  // State baru untuk menangani input pencarian anggota
+  const [memberName, setMemberName] = useState('');
+
+  // Inisialisasi nama anggota jika sedang mengedit data
+  useEffect(() => {
+    if (initialData && initialData.anggota_id) {
+      const nama = anggotaList.find(a => a.id === initialData.anggota_id)?.nama || '';
+      setMemberName(nama);
+    }
+  }, [initialData, anggotaList]);
+
 
   const calculatedValues = useMemo(() => {
     const { harga_pokok, tenor } = formData;
@@ -46,11 +58,23 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     const isNumber = ['harga_pokok', 'uang_muka', 'tenor'].includes(name);
     setFormData(prev => ({ ...prev, [name]: isNumber ? Number(value) : value }));
   };
+  
+  // Handler baru untuk input pencarian anggota
+  const handleMemberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedName = e.target.value;
+    setMemberName(selectedName);
+    const selectedAnggota = anggotaList.find(a => a.nama === selectedName);
+    if (selectedAnggota) {
+        setFormData(prev => ({ ...prev, anggota_id: selectedAnggota.id }));
+    } else {
+        setFormData(prev => ({ ...prev, anggota_id: '' }));
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.anggota_id || !formData.nama_barang || formData.harga_pokok <= 0) {
-        alert("Mohon lengkapi semua data yang diperlukan.");
+        alert("Mohon pilih anggota dan lengkapi semua data yang diperlukan.");
         return;
     }
     onSave({ ...formData, ...calculatedValues });
@@ -61,10 +85,19 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Anggota</label>
-          <select name="anggota_id" value={formData.anggota_id} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required>
-            <option value="">Pilih Anggota...</option>
-            {anggotaList.map(a => <option key={a.id} value={a.id}>{a.nama}</option>)}
-          </select>
+          {/* --- PERUBAHAN DROPDOWN MENJADI INPUT DENGAN PENCARIAN --- */}
+          <input
+            type="text"
+            list="anggota-list"
+            value={memberName}
+            onChange={handleMemberChange}
+            placeholder="Ketik untuk mencari anggota..."
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
+            required
+          />
+          <datalist id="anggota-list">
+            {anggotaList.map(a => <option key={a.id} value={a.nama} />)}
+          </datalist>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Nama Barang</label>
@@ -112,3 +145,4 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
 };
 
 export default MurabahahForm;
+
