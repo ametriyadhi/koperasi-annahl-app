@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota } from '../types';
+import { Unit } from '../types'; // Impor enum Unit
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import MemberForm from './MemberForm';
-import MemberImporter from './MemberImporter'; // <-- Impor komponen baru
+import MemberImporter from './MemberImporter';
 import { PlusCircleIcon } from './icons';
 
 const formatCurrency = (value: number) => {
@@ -16,8 +17,12 @@ const Members: React.FC = () => {
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false); // <-- State untuk modal import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingAnggota, setEditingAnggota] = useState<Anggota | null>(null);
+  
+  // --- STATE BARU UNTUK FITUR FILTER & SEARCH ---
+  const [searchTerm, setSearchTerm] = useState('');
+  const [unitFilter, setUnitFilter] = useState('Semua');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, "anggota"), (querySnapshot) => {
@@ -33,6 +38,22 @@ const Members: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // --- LOGIKA BARU UNTUK MEMFILTER DATA ---
+  const filteredAnggota = useMemo(() => {
+    return anggotaList.filter(anggota => {
+      const searchMatch = anggota.nama.toLowerCase().includes(searchTerm.toLowerCase());
+      const unitMatch = unitFilter === 'Semua' || anggota.unit === unitFilter;
+      return searchMatch && unitMatch;
+    });
+  }, [anggotaList, searchTerm, unitFilter]);
+
+  // --- LOGIKA BARU UNTUK MENGHITUNG TOTAL SIMPANAN ---
+  const totalSimpananFiltered = useMemo(() => {
+    return filteredAnggota.reduce((total, member) => 
+      total + (member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0), 0);
+  }, [filteredAnggota]);
+
 
   const handleOpenFormModal = (anggota: Anggota | null = null) => {
     setEditingAnggota(anggota);
@@ -75,20 +96,40 @@ const Members: React.FC = () => {
   return (
     <>
       <Card>
-        <div className="flex justify-between items-center p-4 sm:p-6 border-b">
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800">Daftar Anggota Koperasi</h3>
-            <p className="text-sm text-gray-600">Data terhubung langsung ke database Firestore.</p>
-          </div>
-          <div className="flex space-x-2">
-            <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
-                Import CSV
-            </button>
-            <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-lime-600">
-              <PlusCircleIcon className="w-5 h-5 mr-2" />
-              Tambah Anggota
-            </button>
-          </div>
+        <div className="p-4 sm:p-6 border-b">
+            <div className="flex justify-between items-center">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800">Daftar Anggota Koperasi</h3>
+                <p className="text-sm text-gray-600">Data terhubung langsung ke database Firestore.</p>
+              </div>
+              <div className="flex space-x-2">
+                <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
+                    Import CSV
+                </button>
+                <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-lime-600">
+                  <PlusCircleIcon className="w-5 h-5 mr-2" />
+                  Tambah Anggota
+                </button>
+              </div>
+            </div>
+            {/* --- UI BARU UNTUK FILTER & SEARCH --- */}
+            <div className="mt-4 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+                <input 
+                    type="text"
+                    placeholder="Cari nama anggota..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full md:w-1/3 border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                />
+                <select
+                    value={unitFilter}
+                    onChange={(e) => setUnitFilter(e.target.value)}
+                    className="w-full md:w-1/3 border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                >
+                    <option value="Semua">Semua Unit</option>
+                    {Object.values(Unit).map(u => <option key={u} value={u}>{u}</option>)}
+                </select>
+            </div>
         </div>
 
         {loading ? (
@@ -106,7 +147,7 @@ const Members: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {anggotaList.map((member) => (
+                {filteredAnggota.map((member) => (
                   <tr key={member.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{member.nama}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{member.nip}</td>
@@ -121,6 +162,14 @@ const Members: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
+              {/* --- FOOTER BARU UNTUK MENAMPILKAN TOTAL --- */}
+              <tfoot className="bg-gray-50 border-t-2">
+                <tr>
+                    <td colSpan={3} className="px-6 py-3 text-right font-bold text-gray-700">Total Simpanan (Hasil Filter)</td>
+                    <td className="px-6 py-3 text-right font-bold text-gray-900">{formatCurrency(totalSimpananFiltered)}</td>
+                    <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         )}
@@ -142,3 +191,4 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
