@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Akun } from '../types';
+import type { Akun, JurnalEntryLine } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import AccountForm from './AccountForm';
-import JurnalUmum from './JurnalUmum'; // Impor komponen Jurnal
+import JurnalUmum from './JurnalUmum';
+import ManualJournalForm from './ManualJournalForm';
 import { PlusCircleIcon } from './icons';
 
 type AccountingTab = 'Bagan Akun' | 'Jurnal Umum';
@@ -46,7 +47,8 @@ const Accounting: React.FC = () => {
     const [activeTab, setActiveTab] = useState<AccountingTab>('Bagan Akun');
     const [accounts, setAccounts] = useState<Akun[]>([]);
     const [loading, setLoading] = useState(true);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+    const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<Akun | null>(null);
 
     useEffect(() => {
@@ -59,13 +61,13 @@ const Accounting: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleOpenModal = (akun: Akun | null = null) => {
+    const handleOpenAccountModal = (akun: Akun | null = null) => {
         setEditingAccount(akun);
-        setIsModalOpen(true);
+        setIsAccountModalOpen(true);
     };
 
-    const handleCloseModal = () => {
-        setIsModalOpen(false);
+    const handleCloseAccountModal = () => {
+        setIsAccountModalOpen(false);
         setEditingAccount(null);
     };
 
@@ -77,9 +79,10 @@ const Accounting: React.FC = () => {
             } else {
                 await addDoc(collection(db, "chart_of_accounts"), { ...akunData, saldo: 0 });
             }
-            handleCloseModal();
+            handleCloseAccountModal();
         } catch (error) {
             console.error("Error saving account: ", error);
+            alert("Gagal menyimpan akun.");
         }
     };
 
@@ -89,7 +92,36 @@ const Accounting: React.FC = () => {
                 await deleteDoc(doc(db, "chart_of_accounts", id));
             } catch (error) {
                 console.error("Error deleting account: ", error);
+                alert("Gagal menghapus akun.");
             }
+        }
+    };
+
+    const handleSaveManualJournal = async (deskripsi: string, lines: JurnalEntryLine[]) => {
+        try {
+            await runTransaction(db, async (transaction) => {
+                const jurnalRef = doc(collection(db, "jurnal_umum"));
+                transaction.set(jurnalRef, {
+                    tanggal: new Date().toISOString(),
+                    deskripsi,
+                    lines,
+                });
+
+                for (const line of lines) {
+                    const accountRef = doc(db, "chart_of_accounts", line.akun_id);
+                    const accDoc = await transaction.get(accountRef);
+                    if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
+                    
+                    const currentSaldo = accDoc.data().saldo || 0;
+                    const newSaldo = currentSaldo + line.debit - line.kredit;
+                    transaction.update(accountRef, { saldo: newSaldo });
+                }
+            });
+            alert("Jurnal manual berhasil disimpan!");
+            setIsJournalModalOpen(false);
+        } catch (error) {
+            console.error("Gagal menyimpan jurnal manual: ", error);
+            alert(`Terjadi kesalahan: ${error}`);
         }
     };
 
@@ -97,7 +129,7 @@ const Accounting: React.FC = () => {
         return accounts
             .filter(a => a.parent_kode === parentId)
             .flatMap(akun => [
-                <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenModal} onDelete={handleDeleteAccount} />,
+                <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
                 ...renderAccounts(akun.kode, level + 1)
             ]);
     };
@@ -126,7 +158,7 @@ const Accounting: React.FC = () => {
                 <Card>
                     <div className="flex justify-between items-center p-4 sm:p-6 border-b">
                         <h3 className="text-lg font-semibold text-gray-800">Bagan Akun (Chart of Accounts)</h3>
-                        <button onClick={() => handleOpenModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                        <button onClick={() => handleOpenAccountModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
                             <PlusCircleIcon className="w-5 h-5 mr-2" />
                             Tambah Akun
                         </button>
@@ -151,19 +183,34 @@ const Accounting: React.FC = () => {
             )}
 
             {activeTab === 'Jurnal Umum' && (
-                <Card title="Jurnal Umum">
+                <Card>
+                    <div className="flex justify-between items-center p-4 sm:p-6 border-b">
+                        <h3 className="text-lg font-semibold text-gray-800">Jurnal Umum</h3>
+                        <button onClick={() => setIsJournalModalOpen(true)} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                            <PlusCircleIcon className="w-5 h-5 mr-2" />
+                            Buat Jurnal Manual
+                        </button>
+                    </div>
                     <div className="p-6">
                         <JurnalUmum />
                     </div>
                 </Card>
             )}
 
-            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingAccount ? 'Edit Akun' : 'Tambah Akun Baru'}>
+            <Modal isOpen={isAccountModalOpen} onClose={handleCloseAccountModal} title={editingAccount ? 'Edit Akun' : 'Tambah Akun Baru'}>
                 <AccountForm 
                     onSave={handleSaveAccount}
-                    onClose={handleCloseModal}
+                    onClose={handleCloseAccountModal}
                     initialData={editingAccount}
                     parentAccounts={accounts}
+                />
+            </Modal>
+
+            <Modal isOpen={isJournalModalOpen} onClose={() => setIsJournalModalOpen(false)} title="Buat Jurnal Manual">
+                <ManualJournalForm
+                    onSave={handleSaveManualJournal}
+                    onClose={() => setIsJournalModalOpen(false)}
+                    accounts={accounts}
                 />
             </Modal>
         </>
@@ -171,4 +218,5 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
 
