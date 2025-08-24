@@ -4,13 +4,14 @@ import Dashboard from './components/Dashboard';
 import Members from './components/Members';
 import Savings from './components/Savings';
 import Murabahah from './components/Murabahah';
-import MurabahahSimulator from './components/Simulator'; // <-- Impor komponen baru
+import MurabahahSimulator from './components/Simulator';
+import MonthlyProcess from './components/MonthlyProcess'; // <-- Impor komponen baru
 import Accounting from './components/Accounting';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
 import { MenuIcon } from './components/icons';
 
-type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
+type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
@@ -22,24 +23,16 @@ const App: React.FC = () => {
 
   const renderView = () => {
     switch (activeView) {
-      case 'Dashboard':
-        return <Dashboard />;
-      case 'Anggota':
-        return <Members />;
-      case 'Simpanan':
-        return <Savings />;
-      case 'Murabahah':
-        return <Murabahah />;
-      case 'Simulator': // <-- Tambahkan case baru
-        return <MurabahahSimulator />;
-      case 'Akuntansi':
-        return <Accounting />;
-      case 'Laporan':
-        return <Reports />;
-      case 'Pengaturan':
-        return <Settings />;
-      default:
-        return <Dashboard />;
+      case 'Dashboard': return <Dashboard />;
+      case 'Anggota': return <Members />;
+      case 'Simpanan': return <Savings />;
+      case 'Murabahah': return <Murabahah />;
+      case 'Simulator': return <MurabahahSimulator />;
+      case 'Proses Bulanan': return <MonthlyProcess />; // <-- Tambahkan case baru
+      case 'Akuntansi': return <Accounting />;
+      case 'Laporan': return <Reports />;
+      case 'Pengaturan': return <Settings />;
+      default: return <Dashboard />;
     }
   };
 
@@ -69,3 +62,4 @@ const App: React.FC = () => {
 };
 
 export default App;
+
