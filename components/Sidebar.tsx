@@ -1,7 +1,10 @@
 import React from 'react';
+// Tambahkan ikon baru, misalnya CalculatorIcon atau sejenisnya jika ada di icons.tsx
+// Untuk sekarang kita gunakan ChartIcon sebagai placeholder
 import { HomeIcon, UsersIcon, WalletIcon, HandshakeIcon, BookIcon, ChartIcon, SettingsIcon, LogoIcon } from './icons';
 
-type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
+// Tambahkan 'Simulator' ke tipe ViewType
+type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
 interface SidebarProps {
   activeView: ViewType;
@@ -14,6 +17,7 @@ const navItems = [
   { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota' },
   { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan' },
   { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah' },
+  { name: 'Simulator', icon: ChartIcon, view: 'Simulator' }, // <-- MENU BARU
   { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi' },
   { name: 'Laporan', icon: ChartIcon, view: 'Laporan' },
   { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan' },
@@ -22,11 +26,11 @@ const navItems = [
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
-      <div className="h-20 flex items-center justify-center border-b bg-primary text-white">
+      <div className={`h-20 flex items-center justify-center border-b bg-primary text-white`}>
         {isOpen ? (
             <div className="flex items-center gap-2 px-2">
                 <LogoIcon className="w-10 h-10 flex-shrink-0"/>
-                <h1 className="text-lg font-bold tracking-wide">Koperasi Karyawan An Nahl</h1>
+                <h1 className="text-lg font-bold tracking-wide">Koperasi An Nahl</h1>
             </div>
         ) : (
             <LogoIcon className="w-10 h-10"/>
