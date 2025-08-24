@@ -1,4 +1,3 @@
-
 export enum Unit {
   PGTK = "PGTK",
   SD = "SD",
@@ -33,10 +32,12 @@ export interface RekeningSimpanan {
   saldo: number;
 }
 
+// DEFINISI TRANSAKSI DIPERBARUI DI SINI
 export interface TransaksiSimpanan {
-  id: string;
-  rekening_id: string;
-  tanggal: string;
+  id: string; // Disediakan oleh Firestore
+  anggota_id: string;
+  jenis: JenisSimpanan;
+  tanggal: string; // Disimpan sebagai ISO string
   tipe: 'Setor' | 'Tarik';
   jumlah: number;
   keterangan: string;
@@ -81,3 +82,4 @@ export interface Akun {
   parent_kode?: string;
   saldo: number;
 }
+
