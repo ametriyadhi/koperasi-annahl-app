@@ -10,12 +10,12 @@ interface MemberImporterProps {
   onImportSuccess: () => void;
 }
 
-// Definisikan header yang wajib ada di file CSV
-const REQUIRED_HEADERS = ['nama', 'nip', 'unit', 'tgl_gabung', 'status', 'simpanan_pokok', 'simpanan_wajib', 'simpanan_sukarela'];
+// Definisikan header baru yang wajib ada di file CSV
+const REQUIRED_HEADERS = ['nama', 'nip', 'unit', 'tgl_gabung', 'status', 'simpanan_pokok', 'simpanan_wajib', 'simpanan_sukarela', 'email', 'password'];
 
 const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [validData, setValidData] = useState<Omit<Anggota, 'id'>[]>([]);
+  const [validData, setValidData] = useState<{anggota: Omit<Anggota, 'id'>, auth: {email: string, password: string}}[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -37,9 +37,8 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
       skipEmptyLines: true,
       complete: (results) => {
         const localErrors: string[] = [];
-        const localValidData: Omit<Anggota, 'id'>[] = [];
+        const localValidData: {anggota: Omit<Anggota, 'id'>, auth: {email: string, password: string}}[] = [];
 
-        // 1. Validasi Header
         const fileHeaders = results.meta.fields || [];
         const missingHeaders = REQUIRED_HEADERS.filter(h => !fileHeaders.includes(h));
         if (missingHeaders.length > 0) {
@@ -49,27 +48,32 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
           return;
         }
 
-        // 2. Validasi Setiap Baris Data
         results.data.forEach((row: any, index) => {
-          const rowNum = index + 2; // +2 karena header dan index 0-based
-          if (!row.nama || !row.nip) {
-            localErrors.push(`Baris ${rowNum}: 'nama' dan 'nip' tidak boleh kosong.`);
+          const rowNum = index + 2;
+          if (!row.nama || !row.nip || !row.email || !row.password) {
+            localErrors.push(`Baris ${rowNum}: 'nama', 'nip', 'email', dan 'password' tidak boleh kosong.`);
             return;
           }
-          if (!Object.values(Unit).includes(row.unit)) {
-            localErrors.push(`Baris ${rowNum}: 'unit' "${row.unit}" tidak valid.`);
+          if (row.password.length < 6) {
+            localErrors.push(`Baris ${rowNum}: 'password' harus minimal 6 karakter.`);
             return;
           }
 
           localValidData.push({
-            nama: row.nama,
-            nip: row.nip,
-            unit: row.unit as Unit,
-            tgl_gabung: row.tgl_gabung || new Date().toISOString().split('T')[0],
-            status: row.status === 'Aktif' ? 'Aktif' : 'Tidak Aktif',
-            simpanan_pokok: Number(row.simpanan_pokok) || 0,
-            simpanan_wajib: Number(row.simpanan_wajib) || 0,
-            simpanan_sukarela: Number(row.simpanan_sukarela) || 0,
+            anggota: {
+              nama: row.nama,
+              nip: row.nip,
+              unit: row.unit as Unit || Unit.Supporting,
+              tgl_gabung: row.tgl_gabung || new Date().toISOString().split('T')[0],
+              status: row.status === 'Aktif' ? 'Aktif' : 'Tidak Aktif',
+              simpanan_pokok: Number(row.simpanan_pokok) || 0,
+              simpanan_wajib: Number(row.simpanan_wajib) || 0,
+              simpanan_sukarela: Number(row.simpanan_sukarela) || 0,
+            },
+            auth: {
+              email: row.email,
+              password: row.password,
+            }
           });
         });
 
@@ -92,19 +96,29 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
   };
 
   const handleImport = async () => {
-    if (validData.length === 0 || errors.length > 0) {
-      alert("Tidak ada data valid untuk diimpor atau masih ada error.");
-      return;
-    }
+    if (validData.length === 0 || errors.length > 0) return;
     setIsProcessing(true);
     try {
       const batch = writeBatch(db);
-      validData.forEach(anggota => {
-        const docRef = doc(collection(db, 'anggota'));
-        batch.set(docRef, anggota);
+      const instructions: string[] = [];
+
+      validData.forEach(item => {
+        const newAnggotaRef = doc(collection(db, 'anggota'));
+        batch.set(newAnggotaRef, item.anggota);
+
+        const newUserRef = doc(db, "users", item.anggota.nip); 
+        batch.set(newUserRef, {
+            email: item.auth.email,
+            role: 'anggota',
+            anggota_id: newAnggotaRef.id,
+            uid: item.anggota.nip
+        });
+        instructions.push(`- Email: ${item.auth.email}, Pass: ${item.auth.password}`);
       });
+      
       await batch.commit();
-      alert(`${validData.length} anggota berhasil diimpor!`);
+
+      alert(`${validData.length} anggota berhasil diimpor!\n\nPENTING: Segera daftarkan semua pengguna ini di Firebase Authentication, lalu perbarui UID mereka di koleksi 'users'.\n\n${instructions.join('\n')}`);
       onImportSuccess();
     } catch (error) {
       console.error("Error importing data: ", error);
