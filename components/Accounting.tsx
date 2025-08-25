@@ -20,14 +20,14 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
     const paddingLeft = level * 20 + 24;
 
     return (
-        <tr className={isParent ? "bg-gray-100" : "hover:bg-gray-50"}>
+        <tr className={isParent ? "bg-gray-100 font-bold" : "hover:bg-gray-50"}>
             <td className="px-6 py-3 whitespace-nowrap" style={{ paddingLeft: `${paddingLeft}px` }}>
-                <div className={`text-sm ${isParent ? 'font-bold text-gray-800' : 'text-gray-700'}`}>
+                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>
                     {akun.kode}
                 </div>
             </td>
             <td className="px-6 py-3 whitespace-nowrap">
-                <div className={`text-sm ${isParent ? 'font-bold text-gray-800' : 'text-gray-700'}`}>
+                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>
                     {akun.nama}
                 </div>
             </td>
@@ -125,14 +125,24 @@ const Accounting: React.FC = () => {
         }
     };
 
-    const renderAccounts = (parentId: string | undefined = undefined, level = 0) => {
-        return accounts
+    // --- FUNGSI YANG DIPERBAIKI ---
+    const renderAccountsRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
+        return allAccounts
             .filter(a => a.parent_kode === parentId)
             .flatMap(akun => [
                 <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
-                ...renderAccounts(akun.kode, level + 1)
+                ...renderAccountsRecursively(akun.kode, allAccounts, level + 1)
             ]);
     };
+
+    const renderedAccountTree = useMemo(() => {
+        const topLevelAccounts = accounts.filter(a => !a.parent_kode);
+        return topLevelAccounts.flatMap(parent => [
+            <AccountRow key={parent.id} akun={parent} level={0} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
+            ...renderAccountsRecursively(parent.kode, accounts, 1)
+        ]);
+    }, [accounts]);
+
 
     return (
         <>
@@ -175,7 +185,7 @@ const Accounting: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white">
-                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderAccounts()}
+                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderedAccountTree}
                             </tbody>
                         </table>
                     </div>
@@ -218,5 +228,6 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
 
 
