@@ -69,10 +69,11 @@ export interface AppSettings {
 }
 
 // --- TIPE DATA BARU UNTUK PERAN & PENGGUNA ---
-export type UserRole = 'admin' | 'pengurus';
+export type UserRole = 'admin' | 'pengurus' | 'anggota';
 
 export interface UserProfile {
     uid: string;
     email: string;
     role: UserRole;
+    anggota_id?: string;
 }
