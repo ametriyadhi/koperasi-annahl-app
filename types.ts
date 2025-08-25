@@ -66,6 +66,11 @@ export interface AppSettings {
   margin_tenor_24: number;
   plafon_pembiayaan_gaji: number;
   maksimal_cicilan_gaji: number;
+  // Struktur baru untuk hak akses menu
+  menuAccess: {
+    admin: string[];
+    pengurus: string[];
+  };
 }
 
 // --- TIPE DATA BARU UNTUK PERAN & PENGGUNA ---
