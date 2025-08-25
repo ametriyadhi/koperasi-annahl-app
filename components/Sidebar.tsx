@@ -28,12 +28,11 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
   ];
 
   const accessibleNavItems = useMemo(() => {
-    // Jangan lakukan apa-apa jika data belum siap
+    // Selalu tunggu sampai semua data siap
     if (authLoading || settingsLoading || !userProfile || !settings.menuAccess) {
       return [];
     }
     
-    // Dapatkan peran pengguna yang valid
     const userRole = userProfile.role;
     
     // Pengecekan aman untuk memastikan peran ada di dalam objek menuAccess
@@ -42,7 +41,8 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
         return navItems.filter(item => allowedViews.includes(item.view));
     }
 
-    return []; // Kembalikan array kosong jika peran tidak dikenali (misal: 'anggota')
+    // Kembalikan array kosong jika peran tidak dikenali (misal: 'anggota')
+    return [];
   }, [userProfile, settings, authLoading, settingsLoading]);
 
   return (
@@ -86,3 +86,4 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
