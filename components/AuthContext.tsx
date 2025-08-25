@@ -24,35 +24,37 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Listener ini akan berjalan sekali saat aplikasi dimuat untuk memeriksa status login
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (!user) {
-        // Jika tidak ada user, proses loading selesai
-        setUserProfile(null);
-        setLoading(false);
-      }
+      // Setelah pemeriksaan awal selesai, loading dianggap selesai.
+      setLoading(false); 
     });
 
+    // Membersihkan listener saat komponen tidak lagi digunakan
     return () => unsubscribeAuth();
   }, []);
 
   useEffect(() => {
     let unsubscribeProfile: () => void;
 
+    // Jika ada pengguna yang login, mulai dengarkan data profilnya
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
       unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           setUserProfile(docSnap.data() as UserProfile);
         } else {
-          // Pengguna terautentikasi tapi tidak punya profil/peran di DB
+          // Jika pengguna ada di Auth tapi tidak punya data peran di Firestore
           setUserProfile(null); 
         }
-        setLoading(false);
       });
+    } else {
+      // Jika pengguna logout, pastikan profil juga kosong
+      setUserProfile(null);
     }
     
-    // Cleanup function
+    // Membersihkan listener profil
     return () => {
       if (unsubscribeProfile) {
         unsubscribeProfile();
@@ -64,9 +66,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {/* Selalu tampilkan children jika tidak sedang loading awal */}
+      {!loading && children}
     </AuthContext.Provider>
   );
+};
+
 };
 
 
