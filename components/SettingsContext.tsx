@@ -19,6 +19,10 @@ const defaultSettings: AppSettings = {
   margin_tenor_24: 30,
   plafon_pembiayaan_gaji: 5,
   maksimal_cicilan_gaji: 3,
+  menuAccess: {
+    admin: ['Dashboard', 'Anggota', 'Simpanan', 'Murabahah', 'Simulator', 'Proses Bulanan', 'Akuntansi', 'Laporan', 'Pengaturan'],
+    pengurus: ['Dashboard', 'Anggota', 'Simpanan', 'Murabahah', 'Simulator', 'Akuntansi', 'Laporan'],
+  },
 };
 
 const SettingsContext = createContext<SettingsContextType>({
