@@ -57,7 +57,6 @@ export interface JurnalEntry {
     lines: JurnalEntryLine[];
 }
 
-// TIPE DATA BARU UNTUK PENGATURAN APLIKASI
 export interface AppSettings {
   id?: string;
   simpanan_pokok: number;
