@@ -61,28 +61,19 @@ const Members: React.FC = () => {
   };
 
   const handleCloseFormModal = () => {
-    setIsFormModalOpen(false);
     setEditingAnggota(null);
+    setIsFormModalOpen(false);
   };
   
-  const handleCloseImportModal = () => {
-      setIsImportModalOpen(false);
-  };
+  const handleCloseImportModal = () => setIsImportModalOpen(false);
 
   const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>, authInfo: { email?: string, password?: string }) => {
     try {
       if (editingAnggota) { // Mode Edit
         const anggotaRef = doc(db, "anggota", editingAnggota.id);
         if (authInfo.email && authInfo.password) { // Menambah akses ke anggota lama
-          const batch = writeBatch(db);
-          batch.update(anggotaRef, anggotaData);
-          const newUserRef = doc(db, "users", anggotaData.nip);
-          batch.set(newUserRef, {
-              email: authInfo.email, role: 'anggota',
-              anggota_id: editingAnggota.id, uid: anggotaData.nip
-          });
-          await batch.commit();
-          alert(`Data anggota diperbarui.\n\nPENTING: Segera daftarkan pengguna baru di Firebase Auth untuk ${authInfo.email}, lalu perbarui UID di koleksi 'users'.`);
+          await updateDoc(anggotaRef, anggotaData);
+          alert(`Data anggota diperbarui.\n\nPENTING: Sekarang, buka Firebase Authentication, buat pengguna baru dengan email ${authInfo.email}, lalu buat dokumen di koleksi 'users' dengan UID dari pengguna baru tersebut, dan hubungkan 'anggota_id' ke '${editingAnggota.id}'.`);
         } else { // Hanya update data anggota
           await updateDoc(anggotaRef, anggotaData);
           alert("Data anggota berhasil diperbarui.");
@@ -92,23 +83,9 @@ const Members: React.FC = () => {
             alert("Email dan password harus diisi untuk anggota baru.");
             return;
         }
-
-        const batch = writeBatch(db);
-        
-        const newAnggotaRef = doc(collection(db, "anggota"));
-        batch.set(newAnggotaRef, anggotaData);
-
-        const newUserRef = doc(db, "users", anggotaData.nip); 
-        batch.set(newUserRef, {
-            email: authInfo.email,
-            role: 'anggota',
-            anggota_id: newAnggotaRef.id,
-            uid: anggotaData.nip
-        });
-        
-        await batch.commit();
-        
-        alert(`Data anggota untuk ${anggotaData.nama} berhasil disimpan.\n\nPENTING: Segera daftarkan pengguna baru di Firebase Authentication dengan:\n\nEmail: ${authInfo.email}\nPassword: [Password yang Anda masukkan]\n\nSetelah itu, salin UID dari Firebase Auth dan ganti NIP di koleksi 'users' dengan UID tersebut.`);
+        // Hanya menyimpan data anggota, tidak membuat profil user
+        const newAnggotaDoc = await addDoc(collection(db, "anggota"), anggotaData);
+        alert(`Langkah 1 Selesai: Data anggota untuk ${anggotaData.nama} telah disimpan.\n\nSEKARANG LAKUKAN LANGKAH 2:\n1. Buka Firebase Authentication.\n2. Buat pengguna baru dengan Email: ${authInfo.email} dan Password: [Password yang Anda masukkan].\n3. Salin User UID yang baru dibuat.\n4. Buka Firestore -> koleksi 'users'.\n5. Buat dokumen baru dengan ID = User UID yang tadi disalin.\n6. Isi field: 'email', 'role' ('anggota'), 'anggota_id' ('${newAnggotaDoc.id}'), dan 'uid' (User UID lagi).`);
       }
       handleCloseFormModal();
     } catch (error) {
@@ -121,9 +98,7 @@ const Members: React.FC = () => {
     if (confirm("Apakah Anda yakin ingin menghapus anggota ini?")) {
       try {
         await deleteDoc(doc(db, "anggota", id));
-      } catch (error) {
-        console.error("Error deleting member: ", error);
-      }
+      } catch (error) { console.error("Error deleting member: ", error); }
     }
   };
   
@@ -229,6 +204,7 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
 
 
 
