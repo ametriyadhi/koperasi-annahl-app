@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { UserProfile, UserRole } from '../types';
 
 const UserManagement: React.FC = () => {
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
-    const [newUserEmail, setNewUserEmail] = useState('');
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "users"), (snapshot) => {
@@ -18,16 +17,15 @@ const UserManagement: React.FC = () => {
     }, []);
 
     const handleRoleChange = async (uid: string, newRole: UserRole) => {
-        const userRef = doc(db, "users", uid);
-        await setDoc(userRef, { role: newRole }, { merge: true });
-    };
-
-    const handleAddUser = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!newUserEmail) return;
-        alert("Fungsi ini hanya untuk demonstrasi. Anda harus membuat pengguna di Firebase Authentication terlebih dahulu, lalu tambahkan emailnya di sini untuk menetapkan peran.");
-        // Di aplikasi nyata, ini akan memanggil Cloud Function untuk membuat pengguna
-        // Untuk sekarang, kita hanya akan menambahkan entri peran
+        if (!uid) return;
+        try {
+            const userRef = doc(db, "users", uid);
+            await setDoc(userRef, { role: newRole }, { merge: true });
+            alert("Peran berhasil diperbarui.");
+        } catch (error) {
+            console.error("Gagal memperbarui peran:", error);
+            alert("Gagal memperbarui peran.");
+        }
     };
 
     return (
@@ -68,3 +66,4 @@ const UserManagement: React.FC = () => {
 };
 
 export default UserManagement;
+
