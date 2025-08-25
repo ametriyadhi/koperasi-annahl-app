@@ -41,7 +41,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
 
     const { totalDebit, totalCredit, isBalanced } = useMemo(() => {
         const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-        const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+        const totalkredit = lines.reduce((sum, line) => sum + line.kredit, 0);
         return {
             totalDebit,
             totalCredit,
