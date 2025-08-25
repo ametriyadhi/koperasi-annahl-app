@@ -6,7 +6,7 @@ import Members from './components/Members';
 import Savings from './components/Savings';
 import Murabahah from './components/Murabahah';
 import MurabahahSimulator from './components/Simulator';
-import MonthlyProcess from './components/MonthlyProcess'; // <-- Impor komponen baru
+import MonthlyProcess from './components/MonthlyProcess';
 import Accounting from './components/Accounting';
 import Reports from './components/Reports';
 import Settings from './components/Settings';
