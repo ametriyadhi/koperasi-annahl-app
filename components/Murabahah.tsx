@@ -164,3 +164,4 @@ const Murabahah: React.FC = () => {
 
 export default Murabahah;
 
+
