@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSettings } from './SettingsContext'; // <-- Gunakan hook kita
+import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 import type { AppSettings } from '../types';
 
