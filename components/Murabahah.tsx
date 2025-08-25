@@ -6,7 +6,7 @@ import { StatusKontrak } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import MurabahahForm from './MurabahahForm';
-import MurabahahImporter from './MurabahahImporter'; // <-- Impor komponen baru
+import MurabahahImporter from './MurabahahImporter';
 import { PlusCircleIcon } from './icons';
 
 const formatCurrency = (value: number) => {
@@ -28,7 +28,7 @@ const Murabahah: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<StatusKontrak>(StatusKontrak.BERJALAN);
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false); // <-- State untuk modal import
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingKontrak, setEditingKontrak] = useState<KontrakMurabahah | null>(null);
 
     useEffect(() => {
@@ -127,7 +127,7 @@ const Murabahah: React.FC = () => {
                                 {filteredContracts.map((kontrak) => {
                                     const debetPokok = kontrak.harga_pokok / kontrak.tenor;
                                     const debetMargin = kontrak.margin / kontrak.tenor;
-                                    const sisaHutang = kontrak.harga_jual - (kontrak.cicilan_terbayar * kontrak.cicilan_per_bulan);
+                                    const sisaHutang = Math.max(0, kontrak.harga_jual - ((kontrak.cicilan_terbayar || 0) * kontrak.cicilan_per_bulan));
                                     return (
                                         <tr key={kontrak.id} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAnggotaName(kontrak.anggota_id)}</td>
@@ -163,6 +163,4 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
-
-
 
