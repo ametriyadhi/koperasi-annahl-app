@@ -28,30 +28,28 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
   ];
 
   const accessibleNavItems = useMemo(() => {
-    // Selalu tunggu sampai semua data siap
     if (authLoading || settingsLoading || !userProfile || !settings.menuAccess) {
       return [];
     }
     
     const userRole = userProfile.role;
     
-    // Pengecekan aman untuk memastikan peran ada di dalam objek menuAccess
     if (userRole === 'admin' || userRole === 'pengurus') {
         const allowedViews = settings.menuAccess[userRole] || [];
         return navItems.filter(item => allowedViews.includes(item.view));
     }
 
-    // Kembalikan array kosong jika peran tidak dikenali (misal: 'anggota')
     return [];
   }, [userProfile, settings, authLoading, settingsLoading]);
 
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
-      <div className={`h-20 flex items-center justify-center border-b bg-primary text-white`}>
+      {/* --- PERUBAHAN DI SINI --- */}
+      <div className={`h-20 flex items-center justify-center border-b border-gray-200 bg-gray-50`}>
         {isOpen ? (
             <div className="flex items-center gap-2 px-2">
                 <LogoIcon className="w-10 h-10 flex-shrink-0"/>
-                <h1 className="text-lg font-bold tracking-wide">Koperasi An Nahl</h1>
+                <h1 className="text-lg font-bold tracking-wide text-gray-800">Koperasi An Nahl</h1>
             </div>
         ) : (
             <LogoIcon className="w-10 h-10"/>
@@ -86,4 +84,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
+
 
