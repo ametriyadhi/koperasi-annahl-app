@@ -24,7 +24,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listener ini akan berjalan sekali saat aplikasi dimuat untuk memeriksa status login
+    // Listener ini hanya untuk memeriksa status login awal dari Firebase Auth
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       // Setelah pemeriksaan awal selesai, loading dianggap selesai.
@@ -36,12 +36,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, []);
 
   useEffect(() => {
-    let unsubscribeProfile: () => void;
-
-    // Jika ada pengguna yang login, mulai dengarkan data profilnya
+    // Listener ini khusus untuk mengambil data profil dari Firestore
+    // jika ada pengguna yang sedang login.
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
-      unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+      const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           setUserProfile(docSnap.data() as UserProfile);
         } else {
@@ -49,18 +48,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUserProfile(null); 
         }
       });
+
+      // Mengembalikan fungsi cleanup untuk listener profil
+      return () => unsubscribeProfile();
     } else {
       // Jika pengguna logout, pastikan profil juga kosong
       setUserProfile(null);
     }
-    
-    // Membersihkan listener profil
-    return () => {
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-      }
-    };
-  }, [currentUser]);
+  }, [currentUser]); // Efek ini berjalan setiap kali currentUser berubah
 
   const value = { currentUser, userProfile, loading };
 
@@ -70,8 +65,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       {!loading && children}
     </AuthContext.Provider>
   );
-};
-
 };
 
 
