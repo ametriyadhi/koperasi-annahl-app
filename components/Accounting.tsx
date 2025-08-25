@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Akun, JurnalEntryLine } from '../types';
@@ -61,17 +61,17 @@ const Accounting: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleOpenAccountModal = (akun: Akun | null = null) => {
+    const handleOpenAccountModal = useCallback((akun: Akun | null = null) => {
         setEditingAccount(akun);
         setIsAccountModalOpen(true);
-    };
+    }, []);
 
-    const handleCloseAccountModal = () => {
+    const handleCloseAccountModal = useCallback(() => {
         setIsAccountModalOpen(false);
         setEditingAccount(null);
-    };
+    }, []);
 
-    const handleSaveAccount = async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
+    const handleSaveAccount = useCallback(async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
         try {
             if (editingAccount) {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
@@ -84,9 +84,9 @@ const Accounting: React.FC = () => {
             console.error("Error saving account: ", error);
             alert("Gagal menyimpan akun.");
         }
-    };
+    }, [editingAccount, handleCloseAccountModal]);
 
-    const handleDeleteAccount = async (id: string) => {
+    const handleDeleteAccount = useCallback(async (id: string) => {
         if (confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
             try {
                 await deleteDoc(doc(db, "chart_of_accounts", id));
@@ -95,9 +95,9 @@ const Accounting: React.FC = () => {
                 alert("Gagal menghapus akun.");
             }
         }
-    };
+    }, []);
 
-    const handleSaveManualJournal = async (deskripsi: string, lines: JurnalEntryLine[]) => {
+    const handleSaveManualJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[]) => {
         try {
             await runTransaction(db, async (transaction) => {
                 const jurnalRef = doc(collection(db, "jurnal_umum"));
@@ -123,25 +123,24 @@ const Accounting: React.FC = () => {
             console.error("Gagal menyimpan jurnal manual: ", error);
             alert(`Terjadi kesalahan: ${error}`);
         }
-    };
-
-    // --- FUNGSI YANG DIPERBAIKI ---
-    const renderAccountsRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
-        return allAccounts
-            .filter(a => a.parent_kode === parentId)
-            .flatMap(akun => [
-                <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
-                ...renderAccountsRecursively(akun.kode, allAccounts, level + 1)
-            ]);
-    };
+    }, []);
 
     const renderedAccountTree = useMemo(() => {
+        const renderAccountsRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
+            return allAccounts
+                .filter(a => a.parent_kode === parentId)
+                .flatMap(akun => [
+                    <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
+                    ...renderAccountsRecursively(akun.kode, allAccounts, level + 1)
+                ]);
+        };
+
         const topLevelAccounts = accounts.filter(a => !a.parent_kode);
         return topLevelAccounts.flatMap(parent => [
             <AccountRow key={parent.id} akun={parent} level={0} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
             ...renderAccountsRecursively(parent.kode, accounts, 1)
         ]);
-    }, [accounts]);
+    }, [accounts, handleOpenAccountModal, handleDeleteAccount]);
 
 
     return (
@@ -228,6 +227,3 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
-
-
-
