@@ -1,19 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { JenisSimpanan } from '../types';
 import type { TransaksiSimpanan } from '../types';
 
 interface TransactionFormProps {
   onSave: (transaksi: Omit<TransaksiSimpanan, 'id' | 'anggota_id' | 'tanggal'>) => void;
   onClose: () => void;
+  initialData?: TransaksiSimpanan | null;
 }
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ onSave, onClose }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ onSave, onClose, initialData }) => {
   const [formData, setFormData] = useState({
-    jenis: JenisSimpanan.SUKARELA,
-    tipe: 'Setor' as 'Setor' | 'Tarik',
-    jumlah: 0,
-    keterangan: '',
+    jenis: initialData?.jenis || JenisSimpanan.SUKARELA,
+    tipe: initialData?.tipe || ('Setor' as 'Setor' | 'Tarik'),
+    jumlah: initialData?.jumlah || 0,
+    keterangan: initialData?.keterangan || '',
   });
+
+  useEffect(() => {
+    if (initialData) {
+      setFormData({
+        jenis: initialData.jenis,
+        tipe: initialData.tipe,
+        jumlah: initialData.jumlah,
+        keterangan: initialData.keterangan,
+      });
+    }
+  }, [initialData]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
