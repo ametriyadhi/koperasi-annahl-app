@@ -12,7 +12,6 @@ interface MurabahahImporterProps {
   anggotaList: Anggota[];
 }
 
-// Definisikan header yang wajib ada di file CSV
 const REQUIRED_HEADERS = ['nip_anggota', 'nama_barang', 'harga_pokok', 'uang_muka', 'tenor', 'tanggal_akad', 'cicilan_terbayar'];
 
 const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImportSuccess, anggotaList }) => {
@@ -44,7 +43,6 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
         const localErrors: string[] = [];
         const localValidData: Omit<KontrakMurabahah, 'id'>[] = [];
 
-        // 1. Validasi Header
         const fileHeaders = results.meta.fields || [];
         const missingHeaders = REQUIRED_HEADERS.filter(h => !fileHeaders.includes(h));
         if (missingHeaders.length > 0) {
@@ -54,7 +52,6 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
           return;
         }
 
-        // 2. Validasi Setiap Baris Data
         results.data.forEach((row: any, index) => {
           const rowNum = index + 2;
           const anggotaId = anggotaMapByNip.get(row.nip_anggota);
@@ -65,12 +62,22 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 
           const harga_pokok = Number(row.harga_pokok);
           const tenor = Number(row.tenor);
-          if (isNaN(harga_pokok) || isNaN(tenor) || harga_pokok <= 0 || tenor <= 0) {
-            localErrors.push(`Baris ${rowNum}: 'harga_pokok' dan 'tenor' harus angka valid.`);
+          const cicilan_terbayar = Number(row.cicilan_terbayar) || 0;
+
+          // --- VALIDASI BARU YANG LEBIH KETAT ---
+          if (isNaN(harga_pokok) || harga_pokok <= 0) {
+            localErrors.push(`Baris ${rowNum}: 'harga_pokok' harus berupa angka lebih dari 0.`);
+            return;
+          }
+          if (isNaN(tenor) || tenor <= 0) {
+            localErrors.push(`Baris ${rowNum}: 'tenor' harus berupa angka lebih dari 0.`);
+            return;
+          }
+          if (isNaN(cicilan_terbayar) || cicilan_terbayar < 0) {
+            localErrors.push(`Baris ${rowNum}: 'cicilan_terbayar' harus berupa angka 0 atau lebih.`);
             return;
           }
           
-          // Hitung nilai turunan
           let marginPersen;
           if (tenor <= 6) marginPersen = settings.margin_tenor_6;
           else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
@@ -80,7 +87,6 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
           const margin = harga_pokok * (marginPersen / 100);
           const harga_jual = harga_pokok + margin;
           const cicilan_per_bulan = harga_jual / tenor;
-          const cicilan_terbayar = Number(row.cicilan_terbayar) || 0;
 
           localValidData.push({
             anggota_id: anggotaId,
