@@ -57,11 +57,21 @@ export interface JurnalEntry {
     lines: JurnalEntryLine[];
 }
 
+// --- TIPE DATA PENGATURAN DIPERBARUI DI SINI ---
 export interface AppSettings {
   id?: string;
   simpanan_pokok: number;
   simpanan_wajib: number;
+  // Kebijakan Margin (dalam persen, misal 10 untuk 10%)
+  margin_tenor_6: number; 
+  margin_tenor_12: number;
+  margin_tenor_18: number;
+  margin_tenor_24: number;
+  // Kebijakan Plafon & Cicilan
+  plafon_pembiayaan_gaji: number; // Pengali gaji, misal 5 untuk 5x gaji
+  maksimal_cicilan_gaji: number; // Pembagi gaji, misal 3 untuk 1/3 gaji
 }
+
 
 
 
