@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSettings } from './SettingsContext'; // <-- Gunakan hook kita
 import Card from './shared/Card';
 
 const formatCurrency = (value: number) => {
@@ -6,6 +7,7 @@ const formatCurrency = (value: number) => {
 };
 
 const MurabahahSimulator: React.FC = () => {
+    const { settings, loading: settingsLoading } = useSettings(); // <-- Ambil data pengaturan
     const [inputs, setInputs] = useState({
         gaji: '',
         cicilanBerjalan: '0',
@@ -48,27 +50,28 @@ const MurabahahSimulator: React.FC = () => {
         let isApproved = true;
         let rejectionReason = '';
 
-        const maxHargaBarang = 5 * gaji;
+        const maxHargaBarang = settings.plafon_pembiayaan_gaji * gaji;
         if (hargaBarang > maxHargaBarang) {
             isApproved = false;
-            rejectionReason = `Harga barang (${formatCurrency(hargaBarang)}) melebihi batas maksimal 5x gaji (${formatCurrency(maxHargaBarang)}).`;
+            rejectionReason = `Harga barang (${formatCurrency(hargaBarang)}) melebihi batas maksimal ${settings.plafon_pembiayaan_gaji}x gaji (${formatCurrency(maxHargaBarang)}).`;
         }
 
         let marginPersen;
-        if (jangkaWaktu <= 6) marginPersen = 0.10;
-        else if (jangkaWaktu <= 12) marginPersen = 0.15;
-        else if (jangkaWaktu <= 18) marginPersen = 0.20;
-        else marginPersen = 0.30;
-
-        const marginRupiah = hargaBarang * marginPersen;
+        if (jangkaWaktu <= 6) marginPersen = settings.margin_tenor_6;
+        else if (jangkaWaktu <= 12) marginPersen = settings.margin_tenor_12;
+        else if (jangkaWaktu <= 18) marginPersen = settings.margin_tenor_18;
+        else marginPersen = settings.margin_tenor_24;
+        
+        const marginRupiah = hargaBarang * (marginPersen / 100);
         const totalHutang = hargaBarang + marginRupiah;
         const cicilanBaru = totalHutang / jangkaWaktu;
-        const maxCicilanBulanan = gaji / 3;
+        
+        const maxCicilanBulanan = gaji / settings.maksimal_cicilan_gaji;
         const totalCicilanBulanan = cicilanBaru + cicilanBerjalan;
 
         if (isApproved && totalCicilanBulanan > maxCicilanBulanan) {
             isApproved = false;
-            rejectionReason = `Total cicilan per bulan (${formatCurrency(totalCicilanBulanan)}) melebihi batas maksimal 1/3 gaji (${formatCurrency(maxCicilanBulanan)}).`;
+            rejectionReason = `Total cicilan per bulan (${formatCurrency(totalCicilanBulanan)}) melebihi batas maksimal 1/${settings.maksimal_cicilan_gaji} gaji (${formatCurrency(maxCicilanBulanan)}).`;
         }
         
         setResult({
@@ -84,6 +87,10 @@ const MurabahahSimulator: React.FC = () => {
             totalCicilanBulanan,
         });
     };
+
+    if (settingsLoading) {
+        return <p>Memuat simulator...</p>;
+    }
 
     return (
         <Card>
@@ -142,7 +149,7 @@ const MurabahahSimulator: React.FC = () => {
                                 <h3 className="font-semibold text-lg mb-2 text-center">Rincian Perhitungan</h3>
                                 <div className="space-y-2">
                                     <div className="flex justify-between"><span>Harga Barang</span><span>{formatCurrency(result.hargaBarang)}</span></div>
-                                    <div className="flex justify-between"><span>Margin Koperasi ({result.marginPersen * 100}%)</span><span>{formatCurrency(result.marginRupiah)}</span></div>
+                                    <div className="flex justify-between"><span>Margin Koperasi ({result.marginPersen}%)</span><span>{formatCurrency(result.marginRupiah)}</span></div>
                                     <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Harga Jual Koperasi</span><span>{formatCurrency(result.totalHutang)}</span></div>
                                     <div className="flex justify-between text-primary font-bold text-lg mt-2"><span>Cicilan Per Bulan</span><span>{formatCurrency(result.cicilanBaru)}</span></div>
                                 </div>
@@ -150,8 +157,8 @@ const MurabahahSimulator: React.FC = () => {
                             <div className="border-t pt-4 mt-4">
                                 <h3 className="font-semibold text-lg mb-2 text-center">Analisis Kelayakan</h3>
                                 <div className="space-y-2">
-                                    <div className="flex justify-between"><span>Maks. Harga Barang (5x Gaji)</span><span>{formatCurrency(result.maxHargaBarang)}</span></div>
-                                    <div className="flex justify-between"><span>Maks. Cicilan Per Bulan (1/3 Gaji)</span><span>{formatCurrency(result.maxCicilanBulanan)}</span></div>
+                                    <div className="flex justify-between"><span>Maks. Harga Barang ({settings.plafon_pembiayaan_gaji}x Gaji)</span><span>{formatCurrency(result.maxHargaBarang)}</span></div>
+                                    <div className="flex justify-between"><span>Maks. Cicilan Per Bulan (1/{settings.maksimal_cicilan_gaji} Gaji)</span><span>{formatCurrency(result.maxCicilanBulanan)}</span></div>
                                     <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Total Cicilan Baru + Lama</span><span>{formatCurrency(result.totalCicilanBulanan)}</span></div>
                                 </div>
                             </div>
@@ -164,5 +171,6 @@ const MurabahahSimulator: React.FC = () => {
 };
 
 export default MurabahahSimulator;
+
 
 
