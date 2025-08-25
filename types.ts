@@ -72,6 +72,12 @@ export interface AppSettings {
   maksimal_cicilan_gaji: number; // Pembagi gaji, misal 3 untuk 1/3 gaji
 }
 
+// --- TIPE DATA BARU UNTUK PERAN & PENGGUNA ---
+export type UserRole = 'admin' | 'pengurus';
 
+export interface UserProfile {
+    uid: string;
+    email: string;
+    role: UserRole;
 
 
