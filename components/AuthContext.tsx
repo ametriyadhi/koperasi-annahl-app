@@ -27,18 +27,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (!user) {
+        // Jika tidak ada user, proses loading selesai
         setUserProfile(null);
         setLoading(false);
       }
     });
 
-    return unsubscribeAuth;
+    return () => unsubscribeAuth();
   }, []);
 
   useEffect(() => {
+    let unsubscribeProfile: () => void;
+
     if (currentUser) {
       const userDocRef = doc(db, 'users', currentUser.uid);
-      const unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
+      unsubscribeProfile = onSnapshot(userDocRef, (docSnap) => {
         if (docSnap.exists()) {
           setUserProfile(docSnap.data() as UserProfile);
         } else {
@@ -47,16 +50,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         setLoading(false);
       });
-      return unsubscribeProfile;
     }
+    
+    // Cleanup function
+    return () => {
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
   }, [currentUser]);
 
   const value = { currentUser, userProfile, loading };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };
+
 
