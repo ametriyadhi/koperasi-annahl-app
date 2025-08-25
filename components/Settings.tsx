@@ -5,7 +5,8 @@ import type { AppSettings } from '../types';
 import AccessControl from './AccessControl';
 import UserManagement from './UserManagement';
 
-type SettingsTab = 'Kebijakan' | 'Hak Akses' | 'Manajemen Pengguna';
+// Tipe untuk Tab disederhanakan
+type SettingsTab = 'Kebijakan' | 'Pengguna & Akses';
 
 const Settings: React.FC = () => {
   const { settings, loading, saveSettings } = useSettings();
@@ -13,6 +14,7 @@ const Settings: React.FC = () => {
   const [formState, setFormState] = useState<AppSettings>(settings);
 
   useEffect(() => {
+    // Hanya perbarui form jika data tidak sedang loading
     if (!loading) {
       setFormState(settings);
     }
@@ -41,7 +43,7 @@ const Settings: React.FC = () => {
       <h2 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Sistem</h2>
       <div className="mb-6 border-b border-gray-200">
           <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-              {(['Kebijakan', 'Hak Akses', 'Manajemen Pengguna'] as SettingsTab[]).map((tab) => (
+              {(['Kebijakan', 'Pengguna & Akses'] as SettingsTab[]).map((tab) => (
                   <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -70,6 +72,7 @@ const Settings: React.FC = () => {
                     <button onClick={() => handleSave('Kebijakan Simpanan')} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-lime-600">Simpan Perubahan</button>
                 </div>
             </Card>
+            
             <Card title="Kebijakan Margin Pembiayaan">
               <div className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
@@ -93,6 +96,7 @@ const Settings: React.FC = () => {
                 <button onClick={() => handleSave('Kebijakan Margin')} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-lime-600">Simpan Perubahan</button>
               </div>
             </Card>
+
             <Card title="Kebijakan Plafon & Cicilan">
               <div className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
@@ -111,16 +115,15 @@ const Settings: React.FC = () => {
         </div>
       )}
 
-      {activeTab === 'Hak Akses' && (
-        <Card title="Manajemen Hak Akses Menu">
-            <AccessControl />
-        </Card>
-      )}
-
-      {activeTab === 'Manajemen Pengguna' && (
-        <Card>
-            <UserManagement />
-        </Card>
+      {activeTab === 'Pengguna & Akses' && (
+        <div className="space-y-8">
+            <Card title="Manajemen Pengguna">
+                <UserManagement />
+            </Card>
+            <Card title="Manajemen Hak Akses Menu">
+                <AccessControl />
+            </Card>
+        </div>
       )}
     </div>
   );
@@ -128,6 +131,4 @@ const Settings: React.FC = () => {
 
 export default Settings;
 
-
-export default Settings;
 
