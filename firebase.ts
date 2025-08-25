@@ -1,6 +1,7 @@
 // Import fungsi yang kita butuhkan dari Firebase SDK
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 // Konfigurasi Firebase Anda yang tadi Anda berikan
 const firebaseConfig = {
@@ -18,3 +19,4 @@ const app = initializeApp(firebaseConfig);
 
 // Inisialisasi Cloud Firestore dan ekspor untuk digunakan di komponen lain
 export const db = getFirestore(app);
+export const auth = getAuth(app);
