@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota } from '../types';
-import { Unit } from '../types'; // Impor enum Unit
+import { Unit } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import MemberForm from './MemberForm';
@@ -19,8 +19,6 @@ const Members: React.FC = () => {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingAnggota, setEditingAnggota] = useState<Anggota | null>(null);
-  
-  // --- STATE BARU UNTUK FITUR FILTER & SEARCH ---
   const [searchTerm, setSearchTerm] = useState('');
   const [unitFilter, setUnitFilter] = useState('Semua');
 
@@ -32,14 +30,10 @@ const Members: React.FC = () => {
       })) as Anggota[];
       setAnggotaList(membersData);
       setLoading(false);
-    }, (error) => {
-      console.error("Error listening to members collection: ", error);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
-  // --- LOGIKA BARU UNTUK MEMFILTER DATA ---
   const filteredAnggota = useMemo(() => {
     return anggotaList.filter(anggota => {
       const searchMatch = anggota.nama.toLowerCase().includes(searchTerm.toLowerCase());
@@ -48,7 +42,6 @@ const Members: React.FC = () => {
     });
   }, [anggotaList, searchTerm, unitFilter]);
 
-  // --- LOGIKA BARU UNTUK MENGHITUNG TOTAL SIMPANAN ---
   const totalSimpananFiltered = useMemo(() => {
     return filteredAnggota.reduce((total, member) => 
       total + (member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0), 0);
@@ -69,17 +62,39 @@ const Members: React.FC = () => {
       setIsImportModalOpen(false);
   };
 
-  const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>) => {
+  const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>, authInfo: { email?: string, password?: string }) => {
     try {
       if (editingAnggota) {
         const docRef = doc(db, "anggota", editingAnggota.id);
         await updateDoc(docRef, anggotaData);
+        alert("Data anggota berhasil diperbarui.");
       } else {
-        await addDoc(collection(db, "anggota"), anggotaData);
+        if (!authInfo.email || !authInfo.password) {
+            alert("Email dan password harus diisi untuk anggota baru.");
+            return;
+        }
+
+        const batch = writeBatch(db);
+        
+        const newAnggotaRef = doc(collection(db, "anggota"));
+        batch.set(newAnggotaRef, anggotaData);
+
+        const newUserRef = doc(db, "users", anggotaData.nip); 
+        batch.set(newUserRef, {
+            email: authInfo.email,
+            role: 'anggota',
+            anggota_id: newAnggotaRef.id,
+            uid: anggotaData.nip
+        });
+        
+        await batch.commit();
+        
+        alert(`Data anggota untuk ${anggotaData.nama} berhasil disimpan.\n\nPENTING: Segera daftarkan pengguna baru di Firebase Authentication dengan:\n\nEmail: ${authInfo.email}\nPassword: [Password yang Anda masukkan]\n\nSetelah itu, salin UID dari Firebase Auth dan ganti NIP di koleksi 'users' dengan UID tersebut.`);
       }
       handleCloseFormModal();
     } catch (error) {
       console.error("Error saving member: ", error);
+      alert("Terjadi kesalahan saat menyimpan data.");
     }
   };
 
@@ -112,7 +127,6 @@ const Members: React.FC = () => {
                 </button>
               </div>
             </div>
-            {/* --- UI BARU UNTUK FILTER & SEARCH --- */}
             <div className="mt-4 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
                 <input 
                     type="text"
@@ -162,7 +176,6 @@ const Members: React.FC = () => {
                   </tr>
                 ))}
               </tbody>
-              {/* --- FOOTER BARU UNTUK MENAMPILKAN TOTAL --- */}
               <tfoot className="bg-gray-50 border-t-2">
                 <tr>
                     <td colSpan={3} className="px-6 py-3 text-right font-bold text-gray-700">Total Simpanan (Hasil Filter)</td>
@@ -191,4 +204,5 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
 
