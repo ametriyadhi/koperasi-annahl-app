@@ -51,6 +51,7 @@ const UserManagement: React.FC = () => {
                                             onChange={(e) => handleRoleChange(user.uid, e.target.value as UserRole)}
                                             className="border-gray-300 rounded-md shadow-sm"
                                         >
+                                            <option value="anggota">Anggota</option>
                                             <option value="pengurus">Pengurus</option>
                                             <option value="admin">Admin</option>
                                         </select>
