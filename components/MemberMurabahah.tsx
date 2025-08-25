@@ -18,7 +18,11 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
     const [pengajuanList, setPengajuanList] = useState<KontrakMurabahah[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ nama_barang: '', harga_pokok: 0, tenor: 12 });
+    const [formData, setFormData] = useState({ 
+        nama_barang: '', 
+        harga_pokok: 0, // Ini adalah "Jumlah Pengajuan Plafon"
+        tenor: 12 
+    });
 
     useEffect(() => {
         const q = query(collection(db, "kontrak_murabahah"), where("anggota_id", "==", anggota.id));
@@ -34,7 +38,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.nama_barang || formData.harga_pokok <= 0) {
-            alert("Nama barang dan harga harus diisi.");
+            alert("Nama barang dan jumlah pengajuan harus diisi.");
             return;
         }
 
@@ -74,7 +78,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
             <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold text-primary">Pembiayaan Saya</h2>
                 <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md">
-                    {showForm ? 'Tutup' : '+ Ajukan Baru'}
+                    {showForm ? 'Tutup Form' : '+ Ajukan Baru'}
                 </button>
             </div>
 
@@ -82,12 +86,18 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                 <div className="p-4 bg-white rounded-lg shadow-md">
                     <form onSubmit={handleSubmit} className="space-y-3">
                         <div>
-                            <label className="block text-sm font-medium">Nama Barang</label>
-                            <input type="text" value={formData.nama_barang} onChange={e => setFormData({...formData, nama_barang: e.target.value})} className="w-full p-2 mt-1 border rounded" />
+                            <label className="block text-sm font-medium">Nama Barang / Keperluan</label>
+                            <input type="text" value={formData.nama_barang} onChange={e => setFormData({...formData, nama_barang: e.target.value})} className="w-full p-2 mt-1 border rounded" placeholder="cth: Laptop, Renovasi Dapur" />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium">Harga Barang (Rp)</label>
-                            <input type="number" value={formData.harga_pokok || ''} onChange={e => setFormData({...formData, harga_pokok: Number(e.target.value)})} className="w-full p-2 mt-1 border rounded" />
+                            <label className="block text-sm font-medium">Jumlah Pengajuan / Harga Barang (Rp)</label>
+                            <input type="number" value={formData.harga_pokok || ''} onChange={e => setFormData({...formData, harga_pokok: Number(e.target.value)})} className="w-full p-2 mt-1 border rounded" placeholder="cth: 10000000" />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium">Jangka Waktu (Tenor)</label>
+                            <select value={formData.tenor} onChange={e => setFormData({...formData, tenor: Number(e.target.value)})} className="w-full p-2 mt-1 border rounded bg-white">
+                                {Array.from({ length: 24 }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
+                            </select>
                         </div>
                         <button type="submit" className="w-full bg-primary text-white font-bold py-2 rounded">Kirim Pengajuan</button>
                     </form>
@@ -110,3 +120,4 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
 };
 
 export default MemberMurabahah;
+
