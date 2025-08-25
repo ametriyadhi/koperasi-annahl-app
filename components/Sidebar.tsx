@@ -35,13 +35,14 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
     
     // Dapatkan peran pengguna yang valid
     const userRole = userProfile.role;
-    if (!userRole) return [];
-
-    // Dapatkan daftar menu yang diizinkan untuk peran tersebut
-    const allowedViews = settings.menuAccess[userRole] || [];
     
-    // Filter menu berdasarkan daftar yang diizinkan
-    return navItems.filter(item => allowedViews.includes(item.view));
+    // Pengecekan aman untuk memastikan peran ada di dalam objek menuAccess
+    if (userRole === 'admin' || userRole === 'pengurus') {
+        const allowedViews = settings.menuAccess[userRole] || [];
+        return navItems.filter(item => allowedViews.includes(item.view));
+    }
+
+    return []; // Kembalikan array kosong jika peran tidak dikenali (misal: 'anggota')
   }, [userProfile, settings, authLoading, settingsLoading]);
 
   return (
@@ -85,7 +86,3 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
-
-
-
-
