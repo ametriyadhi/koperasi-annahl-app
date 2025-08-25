@@ -17,11 +17,11 @@ let nextId = 3;
 const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, accounts }) => {
     const [deskripsi, setDeskripsi] = useState('');
     const [lines, setLines] = useState([
-        { id: 1, akun_id: '', debit: 0, kredit: 0 },
-        { id: 2, akun_id: '', debit: 0, kredit: 0 },
+        { id: 1, akun_id: '', debit: 0, credit: 0 },
+        { id: 2, akun_id: '', debit: 0, credit: 0 },
     ]);
 
-    const handleLineChange = (id: number, field: 'akun_id' | 'debit' | 'kredit', value: string | number) => {
+    const handleLineChange = (id: number, field: 'akun_id' | 'debit' | 'credit', value: string | number) => {
         setLines(lines.map(line => {
             if (line.id === id) {
                  const numericValue = typeof value === 'string' && field !== 'akun_id' ? parseFloat(value) || 0 : value;
@@ -32,7 +32,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
     };
     
     const addLine = () => {
-        setLines([...lines, { id: nextId++, akun_id: '', debit: 0, kredit: 0 }]);
+        setLines([...lines, { id: nextId++, akun_id: '', debit: 0, credit: 0 }]);
     };
 
     const removeLine = (id: number) => {
@@ -41,7 +41,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
 
     const { totalDebit, totalCredit, isBalanced } = useMemo(() => {
         const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-        const totalkredit = lines.reduce((sum, line) => sum + line.kredit, 0);
+        const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
         return {
             totalDebit,
             totalCredit,
@@ -60,7 +60,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
         }
         
         const finalLines: JurnalEntryLine[] = lines
-            .filter(line => line.akun_id && (line.debit > 0 || line.kredit > 0))
+            .filter(line => line.akun_id && (line.debit > 0 || line.credit > 0))
             .map(line => {
                 const account = accounts.find(a => a.id === line.akun_id);
                 return {
