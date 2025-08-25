@@ -116,8 +116,36 @@ const MemberSimulator: React.FC<MemberSimulatorProps> = ({ anggota }) => {
 
             {result && (
                 <div className="p-4 bg-white rounded-lg shadow-sm space-y-3">
-                    <h3 className="font-bold text-center text-lg">{result.isApproved ? 'Hasil Simulasi - Disetujui' : 'Hasil Simulasi - Ditolak'}</h3>
-                    {/* ... (Tampilan hasil lengkap seperti di admin simulator) ... */}
+                    <h2 className="text-xl font-bold mb-4 text-center">{result.isApproved ? 'Hasil Simulasi - Disetujui' : 'Hasil Simulasi - Ditolak'}</h2>
+                    <div className="space-y-3">
+                        <div className={`flex justify-between items-center p-3 rounded-lg ${result.isApproved ? 'bg-green-100' : 'bg-red-100'}`}>
+                            <span className="font-semibold">Status Kelayakan</span>
+                            <span className={`font-bold text-lg ${result.isApproved ? 'text-green-600' : 'text-red-600'}`}>{result.isApproved ? 'DISETUJUI' : 'DITOLAK'}</span>
+                        </div>
+                        {!result.isApproved && (
+                            <div className="p-3 rounded-lg bg-red-100 text-red-700">
+                                <p className="font-semibold">Alasan Penolakan:</p>
+                                <p>{result.rejectionReason}</p>
+                            </div>
+                        )}
+                        <div className="border-t pt-4 mt-4">
+                            <h3 className="font-semibold text-lg mb-2 text-center">Rincian Perhitungan</h3>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between"><span>Harga Barang</span><span>{formatCurrency(result.hargaBarang)}</span></div>
+                                <div className="flex justify-between"><span>Margin Koperasi ({result.marginPersen}%)</span><span>{formatCurrency(result.marginRupiah)}</span></div>
+                                <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Harga Jual Koperasi</span><span>{formatCurrency(result.totalHutang)}</span></div>
+                                <div className="flex justify-between text-primary font-bold text-lg mt-2"><span>Cicilan Per Bulan</span><span>{formatCurrency(result.cicilanBaru)}</span></div>
+                            </div>
+                        </div>
+                         <div className="border-t pt-4 mt-4">
+                            <h3 className="font-semibold text-lg mb-2 text-center">Analisis Kelayakan</h3>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between"><span>Maks. Harga Barang ({settings.plafon_pembiayaan_gaji}x Gaji)</span><span>{formatCurrency(result.maxHargaBarang)}</span></div>
+                                <div className="flex justify-between"><span>Maks. Cicilan Per Bulan (1/{settings.maksimal_cicilan_gaji} Gaji)</span><span>{formatCurrency(result.maxCicilanBulanan)}</span></div>
+                                <div className="flex justify-between font-bold border-t border-dashed pt-2"><span>Total Cicilan Baru + Lama</span><span>{formatCurrency(result.totalCicilanBulanan)}</span></div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
@@ -125,4 +153,5 @@ const MemberSimulator: React.FC<MemberSimulatorProps> = ({ anggota }) => {
 };
 
 export default MemberSimulator;
+
 
