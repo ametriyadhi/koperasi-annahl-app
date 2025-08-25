@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, TransaksiSimpanan } from '../types';
@@ -17,8 +17,9 @@ const Savings: React.FC = () => {
     const [transaksiList, setTransaksiList] = useState<TransaksiSimpanan[]>([]);
     const [loading, setLoading] = useState({ anggota: true, transaksi: false });
     const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingTransaksi, setEditingTransaksi] = useState<TransaksiSimpanan | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
-    // 1. Fetch semua anggota secara real-time
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "anggota"), (snapshot) => {
             const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Anggota[];
@@ -28,14 +29,12 @@ const Savings: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    // 2. Fetch transaksi untuk anggota yang dipilih secara real-time
     useEffect(() => {
         if (selectedAnggota) {
             setLoading(prev => ({ ...prev, transaksi: true }));
             const transaksiCol = collection(db, "anggota", selectedAnggota.id, "transaksi");
             const unsubscribe = onSnapshot(transaksiCol, (snapshot) => {
                 const transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as TransaksiSimpanan[];
-                // Urutkan transaksi dari yang terbaru
                 transactions.sort((a, b) => new Date(b.tanggal).getTime() - new Date(a.tanggal).getTime());
                 setTransaksiList(transactions);
                 setLoading(prev => ({ ...prev, transaksi: false }));
@@ -43,6 +42,20 @@ const Savings: React.FC = () => {
             return () => unsubscribe();
         }
     }, [selectedAnggota]);
+
+    const filteredAnggotaList = useMemo(() => {
+        return anggotaList.filter(a => a.nama.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [anggotaList, searchTerm]);
+
+    const handleOpenModal = (transaksi: TransaksiSimpanan | null = null) => {
+        setEditingTransaksi(transaksi);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setIsModalOpen(false);
+        setEditingTransaksi(null);
+    };
 
     const handleSaveTransaksi = async (transaksiData: Omit<TransaksiSimpanan, 'id' | 'anggota_id' | 'tanggal'>) => {
         if (!selectedAnggota) return;
@@ -54,43 +67,81 @@ const Savings: React.FC = () => {
             await runTransaction(db, async (transaction) => {
                 const memberDoc = await transaction.get(memberRef);
                 if (!memberDoc.exists()) throw new Error("Anggota tidak ditemukan!");
+                const currentData = memberDoc.data() as Anggota;
+
+                const fieldMap: Record<JenisSimpanan, keyof Anggota> = {
+                    [JenisSimpanan.POKOK]: 'simpanan_pokok',
+                    [JenisSimpanan.WAJIB]: 'simpanan_wajib',
+                    [JenisSimpanan.SUKARELA]: 'simpanan_sukarela',
+                };
+
+                if (editingTransaksi) { // LOGIKA EDIT
+                    const oldTransaksiRef = doc(db, "anggota", selectedAnggota.id, "transaksi", editingTransaksi.id);
+                    const oldTransaksiData = transaksiList.find(t => t.id === editingTransaksi.id);
+                    if (!oldTransaksiData) throw new Error("Transaksi lama tidak ditemukan!");
+
+                    // 1. Batalkan efek transaksi lama
+                    let balance = currentData[fieldMap[oldTransaksiData.jenis] as keyof Anggota] as number;
+                    balance += oldTransaksiData.tipe === 'Tarik' ? oldTransaksiData.jumlah : -oldTransaksiData.jumlah;
+                    
+                    // 2. Terapkan efek transaksi baru
+                    balance += transaksiData.tipe === 'Setor' ? transaksiData.jumlah : -transaksiData.jumlah;
+                    if (balance < 0) throw new Error("Saldo tidak mencukupi!");
+
+                    transaction.update(memberRef, { [fieldMap[transaksiData.jenis]]: balance });
+                    transaction.update(oldTransaksiRef, { ...transaksiData, tanggal: editingTransaksi.tanggal });
+                } else { // LOGIKA TAMBAH BARU
+                    const fieldToUpdate = fieldMap[transaksiData.jenis];
+                    const currentBalance = currentData[fieldToUpdate] as number || 0;
+                    let newBalance = currentBalance;
+                    newBalance += transaksiData.tipe === 'Setor' ? transaksiData.jumlah : -transaksiData.jumlah;
+                    if (newBalance < 0) throw new Error("Saldo tidak mencukupi!");
+
+                    transaction.update(memberRef, { [fieldToUpdate]: newBalance });
+                    const newTransaksiRef = doc(transaksiCol);
+                    transaction.set(newTransaksiRef, {
+                        ...transaksiData,
+                        anggota_id: selectedAnggota.id,
+                        tanggal: new Date().toISOString(),
+                    });
+                }
+            });
+            handleCloseModal();
+        } catch (error: any) {
+            console.error("Gagal menyimpan transaksi: ", error);
+            alert(`Error: ${error.message}`);
+        }
+    };
+
+    const handleDeleteTransaksi = async (transaksi: TransaksiSimpanan) => {
+        if (!selectedAnggota || !confirm(`Yakin ingin menghapus transaksi "${transaksi.keterangan}"? Aksi ini akan mengubah saldo.`)) return;
+
+        const memberRef = doc(db, "anggota", selectedAnggota.id);
+        const transaksiRef = doc(db, "anggota", selectedAnggota.id, "transaksi", transaksi.id);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const memberDoc = await transaction.get(memberRef);
+                if (!memberDoc.exists()) throw new Error("Anggota tidak ditemukan!");
 
                 const currentData = memberDoc.data() as Anggota;
-                
                 const fieldMap: Record<JenisSimpanan, keyof Anggota> = {
                     [JenisSimpanan.POKOK]: 'simpanan_pokok',
                     [JenisSimpanan.WAJIB]: 'simpanan_wajib',
                     [JenisSimpanan.SUKARELA]: 'simpanan_sukarela',
                 };
                 
-                const fieldToUpdate = fieldMap[transaksiData.jenis];
-                const currentBalance = currentData[fieldToUpdate] as number || 0;
-                let newBalance;
+                const fieldToUpdate = fieldMap[transaksi.jenis];
+                let currentBalance = currentData[fieldToUpdate] as number || 0;
+                // Batalkan efek transaksi yang dihapus
+                currentBalance += transaksi.tipe === 'Tarik' ? transaksi.jumlah : -transaksi.jumlah;
+                if (currentBalance < 0) throw new Error("Saldo menjadi negatif setelah penghapusan!");
 
-                if (transaksiData.tipe === 'Setor') {
-                    newBalance = currentBalance + transaksiData.jumlah;
-                } else { // Tarik
-                    if (transaksiData.jenis !== JenisSimpanan.SUKARELA) {
-                        throw new Error("Penarikan hanya bisa dari Simpanan Sukarela!");
-                    }
-                    newBalance = currentBalance - transaksiData.jumlah;
-                    if (newBalance < 0) throw new Error("Saldo tidak mencukupi!");
-                }
-
-                // Update saldo di dokumen anggota
-                transaction.update(memberRef, { [fieldToUpdate]: newBalance });
-
-                // Buat dokumen transaksi baru di sub-collection
-                const newTransaksiRef = doc(transaksiCol); // Buat ref baru
-                transaction.set(newTransaksiRef, {
-                    ...transaksiData,
-                    anggota_id: selectedAnggota.id,
-                    tanggal: new Date().toISOString(),
-                });
+                transaction.update(memberRef, { [fieldToUpdate]: currentBalance });
+                transaction.delete(transaksiRef);
             });
-            setIsModalOpen(false);
         } catch (error: any) {
-            console.error("Gagal menyimpan transaksi: ", error);
+            console.error("Gagal menghapus transaksi: ", error);
             alert(`Error: ${error.message}`);
         }
     };
@@ -101,13 +152,22 @@ const Savings: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1">
                     <Card title="Pilih Anggota">
-                        {loading.anggota ? <p>Memuat...</p> : (
+                        <div className="p-4 border-b">
+                            <input
+                                type="text"
+                                placeholder="Cari nama anggota..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                            />
+                        </div>
+                        {loading.anggota ? <p className="p-4">Memuat...</p> : (
                             <ul className="max-h-96 overflow-y-auto">
-                                {anggotaList.map(anggota => (
+                                {filteredAnggotaList.map(anggota => (
                                     <li key={anggota.id}>
                                         <button 
                                             onClick={() => setSelectedAnggota(anggota)}
-                                            className={`w-full text-left p-3 rounded-lg text-sm ${selectedAnggota?.id === anggota.id ? 'bg-primary text-white' : 'hover:bg-gray-100'}`}>
+                                            className={`w-full text-left p-3 text-sm ${selectedAnggota?.id === anggota.id ? 'bg-primary text-white' : 'hover:bg-gray-100'}`}>
                                             {anggota.nama}
                                         </button>
                                     </li>
@@ -121,8 +181,8 @@ const Savings: React.FC = () => {
                         <div className="space-y-6">
                             <Card>
                                 <div className="p-4 sm:p-6 border-b flex justify-between items-center">
-                                    <h3 className="text-lg font-semibold">Rekening Simpanan - {selectedAnggota.nama}</h3>
-                                    <button onClick={() => setIsModalOpen(true)} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-lime-600">
+                                    <h3 className="text-lg font-semibold">Rekening - {selectedAnggota.nama}</h3>
+                                    <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
                                         + Transaksi Baru
                                     </button>
                                 </div>
@@ -142,7 +202,7 @@ const Savings: React.FC = () => {
                                 </div>
                             </Card>
                             <Card title="Riwayat Transaksi">
-                                {loading.transaksi ? <p>Memuat riwayat...</p> : (
+                                {loading.transaksi ? <p className="p-4">Memuat riwayat...</p> : (
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full divide-y divide-gray-200">
                                             <thead className="bg-gray-50">
@@ -151,6 +211,7 @@ const Savings: React.FC = () => {
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Jenis</th>
                                                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Keterangan</th>
                                                     <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                                                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -161,6 +222,10 @@ const Savings: React.FC = () => {
                                                         <td className="px-4 py-2 text-sm text-gray-600">{t.keterangan}</td>
                                                         <td className={`px-4 py-2 text-sm text-right font-semibold ${t.tipe === 'Setor' ? 'text-green-600' : 'text-red-600'}`}>
                                                             {t.tipe === 'Tarik' && '- '}{formatCurrency(t.jumlah)}
+                                                        </td>
+                                                        <td className="px-4 py-2 text-right text-sm space-x-2">
+                                                            <button onClick={() => handleOpenModal(t)} className="text-primary hover:text-amber-600">Edit</button>
+                                                            <button onClick={() => handleDeleteTransaksi(t)} className="text-red-600 hover:text-red-800">Hapus</button>
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -179,13 +244,14 @@ const Savings: React.FC = () => {
                 </div>
             </div>
 
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={`Transaksi Baru untuk ${selectedAnggota?.nama}`}>
-                <TransactionForm onSave={handleSaveTransaksi} onClose={() => setIsModalOpen(false)} />
+            <Modal isOpen={isModalOpen} onClose={handleCloseModal} title={editingTransaksi ? 'Edit Transaksi' : `Transaksi Baru untuk ${selectedAnggota?.nama}`}>
+                <TransactionForm onSave={handleSaveTransaksi} onClose={handleCloseModal} initialData={editingTransaksi} />
             </Modal>
         </>
     );
 };
 
 export default Savings;
+
 
 
