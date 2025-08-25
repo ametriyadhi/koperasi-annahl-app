@@ -125,9 +125,13 @@ const Murabahah: React.FC = () => {
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredContracts.map((kontrak) => {
-                                    const debetPokok = kontrak.harga_pokok / kontrak.tenor;
-                                    const debetMargin = kontrak.margin / kontrak.tenor;
-                                    const sisaHutang = Math.max(0, kontrak.harga_jual - ((kontrak.cicilan_terbayar || 0) * kontrak.cicilan_per_bulan));
+                                    // --- RUMUS YANG DIPERBAIKI ---
+                                    const pokokSetelahDP = (kontrak.harga_pokok || 0) - (kontrak.uang_muka || 0);
+                                    const debetPokok = pokokSetelahDP / (kontrak.tenor || 1);
+                                    const debetMargin = (kontrak.margin || 0) / (kontrak.tenor || 1);
+                                    const hutangSetelahDP = (kontrak.harga_jual || 0) - (kontrak.uang_muka || 0);
+                                    const sisaHutang = Math.max(0, hutangSetelahDP - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
+                                    
                                     return (
                                         <tr key={kontrak.id} className="hover:bg-gray-50">
                                             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAnggotaName(kontrak.anggota_id)}</td>
@@ -163,5 +167,6 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
 
