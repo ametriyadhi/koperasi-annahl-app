@@ -70,21 +70,20 @@ const MemberPortal: React.FC = () => {
     if (!anggotaData) return <div className="p-4 text-center">Data anggota tidak ditemukan. <button onClick={handleLogout}>Logout</button></div>;
 
     return (
-        <div className="bg-light min-h-screen font-sans pb-20"> {/* Padding bottom untuk navigasi */}
-            <header className="bg-primary text-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-10">
+        <div className="bg-light min-h-screen font-sans pb-20">
+            <header className="bg-white p-4 shadow-lg flex justify-between items-center sticky top-0 z-10">
                 <div className="flex items-center gap-3">
                     <LogoIcon className="w-10 h-10"/>
                     <div>
-                        <h1 className="font-bold text-lg">Koperasi An Nahl</h1>
-                        <p className="text-xs opacity-90">Portal Anggota</p>
+                        <h1 className="font-bold text-lg text-primary">Koperasi An Nahl</h1>
+                        <p className="text-xs text-gray-600">Portal Anggota</p>
                     </div>
                 </div>
-                <button onClick={handleLogout} className="text-sm font-semibold">Logout</button>
+                <button onClick={handleLogout} className="text-sm font-semibold text-secondary">Logout</button>
             </header>
 
             {renderContent()}
 
-            {/* Navigasi Bawah */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-2px_10px_rgba(0,0,0,0.1)] flex justify-around">
                 <button onClick={() => setActiveView('Beranda')} className={`flex flex-col items-center justify-center p-2 w-full ${activeView === 'Beranda' ? 'text-primary' : 'text-gray-500'}`}>
                     <HomeIcon className="w-6 h-6 mb-1" />
@@ -104,4 +103,5 @@ const MemberPortal: React.FC = () => {
 };
 
 export default MemberPortal;
+
 
