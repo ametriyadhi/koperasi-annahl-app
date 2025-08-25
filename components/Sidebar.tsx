@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { useAuth } from './AuthContext';
+import { useSettings } from './SettingsContext';
 import { HomeIcon, UsersIcon, WalletIcon, HandshakeIcon, BookIcon, ChartIcon, SettingsIcon, LogoIcon } from './icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
@@ -11,10 +12,9 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
-  const { userProfile } = useAuth();
-  const { settings } = useSettings(); // <-- Dapatkan data pengaturan
+  const { userProfile, loading: authLoading } = useAuth();
+  const { settings, loading: settingsLoading } = useSettings();
 
-  // Daftar menu sekarang tidak lagi memiliki properti 'roles'
   const navItems = [
     { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard' },
     { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota' },
@@ -27,16 +27,22 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
     { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan' },
   ];
 
-  // --- LOGIKA BARU YANG DINAMIS ---
   const accessibleNavItems = useMemo(() => {
-    if (!userProfile || !userProfile.role || !settings.menuAccess) {
+    // Jangan lakukan apa-apa jika data belum siap
+    if (authLoading || settingsLoading || !userProfile || !settings.menuAccess) {
       return [];
     }
-    // Dapatkan daftar menu yang diizinkan untuk peran pengguna saat ini
-    const allowedViews = settings.menuAccess[userProfile.role] || [];
+    
+    // Dapatkan peran pengguna yang valid
+    const userRole = userProfile.role;
+    if (!userRole) return [];
+
+    // Dapatkan daftar menu yang diizinkan untuk peran tersebut
+    const allowedViews = settings.menuAccess[userRole] || [];
+    
     // Filter menu berdasarkan daftar yang diizinkan
     return navItems.filter(item => allowedViews.includes(item.view));
-  }, [userProfile, settings.menuAccess]);
+  }, [userProfile, settings, authLoading, settingsLoading]);
 
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
@@ -51,21 +57,25 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
         )}
       </div>
       <nav className={`flex-1 py-6 space-y-2 ${isOpen ? 'px-4' : 'px-2'}`}>
-        {accessibleNavItems.map((item) => (
-          <button
-            key={item.name}
-            title={isOpen ? '' : item.name}
-            onClick={() => setActiveView(item.view as ViewType)}
-            className={`flex items-center w-full py-3 text-sm font-medium rounded-lg transition-all duration-200 ${isOpen ? 'px-4' : 'justify-center'} ${
-              activeView === item.view
-                ? 'bg-primary text-white shadow-md'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-            }`}
-          >
-            <item.icon className={`w-5 h-5 flex-shrink-0 ${isOpen ? 'mr-3' : 'mr-0'}`} />
-            <span className={`whitespace-nowrap transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 w-0 h-0'}`}>{item.name}</span>
-          </button>
-        ))}
+        {(authLoading || settingsLoading) ? (
+            <p className="text-center text-xs text-gray-500">Memuat menu...</p>
+        ) : (
+            accessibleNavItems.map((item) => (
+              <button
+                key={item.name}
+                title={isOpen ? '' : item.name}
+                onClick={() => setActiveView(item.view as ViewType)}
+                className={`flex items-center w-full py-3 text-sm font-medium rounded-lg transition-all duration-200 ${isOpen ? 'px-4' : 'justify-center'} ${
+                  activeView === item.view
+                    ? 'bg-primary text-white shadow-md'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                }`}
+              >
+                <item.icon className={`w-5 h-5 flex-shrink-0 ${isOpen ? 'mr-3' : 'mr-0'}`} />
+                <span className={`whitespace-nowrap transition-opacity ${isOpen ? 'opacity-100' : 'opacity-0 w-0 h-0'}`}>{item.name}</span>
+              </button>
+            ))
+        )}
       </nav>
       <div className={`p-4 border-t transition-opacity duration-200 ease-in-out ${isOpen ? 'opacity-100' : 'opacity-0 h-0 p-0 overflow-hidden'}`}>
           <p className="text-xs text-gray-500 text-center">&copy; 2024 An Nahl Islamic School</p>
@@ -75,6 +85,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
 
 
 
