@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Anggota } from '../types';
+import type { Anggota, UserProfile } from '../types';
 import { Unit } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
@@ -15,6 +15,7 @@ const formatCurrency = (value: number) => {
 
 const Members: React.FC = () => {
   const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -23,7 +24,7 @@ const Members: React.FC = () => {
   const [unitFilter, setUnitFilter] = useState('Semua');
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, "anggota"), (querySnapshot) => {
+    const unsubAnggota = onSnapshot(collection(db, "anggota"), (querySnapshot) => {
       const membersData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
@@ -31,7 +32,13 @@ const Members: React.FC = () => {
       setAnggotaList(membersData);
       setLoading(false);
     });
-    return () => unsubscribe();
+    const unsubUsers = onSnapshot(collection(db, "users"), (snapshot) => {
+      setUserProfiles(snapshot.docs.map(doc => doc.data() as UserProfile));
+    });
+    return () => {
+      unsubAnggota();
+      unsubUsers();
+    };
   }, []);
 
   const filteredAnggota = useMemo(() => {
@@ -64,11 +71,23 @@ const Members: React.FC = () => {
 
   const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>, authInfo: { email?: string, password?: string }) => {
     try {
-      if (editingAnggota) {
-        const docRef = doc(db, "anggota", editingAnggota.id);
-        await updateDoc(docRef, anggotaData);
-        alert("Data anggota berhasil diperbarui.");
-      } else {
+      if (editingAnggota) { // Mode Edit
+        const anggotaRef = doc(db, "anggota", editingAnggota.id);
+        if (authInfo.email && authInfo.password) { // Menambah akses ke anggota lama
+          const batch = writeBatch(db);
+          batch.update(anggotaRef, anggotaData);
+          const newUserRef = doc(db, "users", anggotaData.nip);
+          batch.set(newUserRef, {
+              email: authInfo.email, role: 'anggota',
+              anggota_id: editingAnggota.id, uid: anggotaData.nip
+          });
+          await batch.commit();
+          alert(`Data anggota diperbarui.\n\nPENTING: Segera daftarkan pengguna baru di Firebase Auth untuk ${authInfo.email}, lalu perbarui UID di koleksi 'users'.`);
+        } else { // Hanya update data anggota
+          await updateDoc(anggotaRef, anggotaData);
+          alert("Data anggota berhasil diperbarui.");
+        }
+      } else { // Mode Tambah Baru
         if (!authInfo.email || !authInfo.password) {
             alert("Email dan password harus diisi untuk anggota baru.");
             return;
@@ -108,6 +127,11 @@ const Members: React.FC = () => {
     }
   };
   
+  const userProfileForEdit = useMemo(() => {
+    if (!editingAnggota) return null;
+    return userProfiles.find(p => p.anggota_id === editingAnggota.id) || null;
+  }, [editingAnggota, userProfiles]);
+
   return (
     <>
       <Card>
@@ -193,6 +217,7 @@ const Members: React.FC = () => {
           onSave={handleSaveAnggota}
           onClose={handleCloseFormModal}
           initialData={editingAnggota}
+          userProfile={userProfileForEdit}
         />
       </Modal>
       
@@ -204,5 +229,6 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
 
 
