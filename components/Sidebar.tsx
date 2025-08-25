@@ -12,25 +12,31 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
   const { userProfile } = useAuth();
+  const { settings } = useSettings(); // <-- Dapatkan data pengaturan
 
+  // Daftar menu sekarang tidak lagi memiliki properti 'roles'
   const navItems = [
-    { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard', roles: ['admin', 'pengurus'] },
-    { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota', roles: ['admin', 'pengurus'] },
-    { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan', roles: ['admin', 'pengurus'] },
-    { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah', roles: ['admin', 'pengurus'] },
-    { name: 'Simulator', icon: ChartIcon, view: 'Simulator', roles: ['admin', 'pengurus'] },
-    { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan', roles: ['admin'] },
-    { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi', roles: ['admin', 'pengurus'] },
-    { name: 'Laporan', icon: ChartIcon, view: 'Laporan', roles: ['admin', 'pengurus'] },
-    { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan', roles: ['admin'] },
+    { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard' },
+    { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota' },
+    { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan' },
+    { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah' },
+    { name: 'Simulator', icon: ChartIcon, view: 'Simulator' },
+    { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan' },
+    { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi' },
+    { name: 'Laporan', icon: ChartIcon, view: 'Laporan' },
+    { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan' },
   ];
 
+  // --- LOGIKA BARU YANG DINAMIS ---
   const accessibleNavItems = useMemo(() => {
-    if (!userProfile || !userProfile.role) {
+    if (!userProfile || !userProfile.role || !settings.menuAccess) {
       return [];
     }
-    return navItems.filter(item => item.roles.includes(userProfile.role));
-  }, [userProfile]);
+    // Dapatkan daftar menu yang diizinkan untuk peran pengguna saat ini
+    const allowedViews = settings.menuAccess[userProfile.role] || [];
+    // Filter menu berdasarkan daftar yang diizinkan
+    return navItems.filter(item => allowedViews.includes(item.view));
+  }, [userProfile, settings.menuAccess]);
 
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
