@@ -64,6 +64,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
           const tenor = Number(row.tenor);
           const cicilan_terbayar = Number(row.cicilan_terbayar) || 0;
 
+          // --- VALIDASI BARU YANG LEBIH KETAT ---
           if (isNaN(harga_pokok) || harga_pokok <= 0) {
             localErrors.push(`Baris ${rowNum}: 'harga_pokok' harus berupa angka lebih dari 0.`);
             return;
@@ -85,7 +86,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 
           const margin = harga_pokok * (marginPersen / 100);
           const harga_jual = harga_pokok + margin;
-          const cicilan_per_bulan = harga_jual / tenor;
+          const cicilan_per_bulan = (harga_jual - (Number(row.uang_muka) || 0)) / tenor;
 
           localValidData.push({
             anggota_id: anggotaId,
@@ -188,4 +189,5 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 };
 
 export default MurabahahImporter;
+
 
