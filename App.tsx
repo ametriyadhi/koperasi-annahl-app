@@ -5,6 +5,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
 import Login from './components/Login';
+import MemberPortal from './components/MemberPortal'; // <-- Impor Portal Anggota
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Members from './components/Members';
@@ -19,28 +20,15 @@ import { MenuIcon } from './components/icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
-// Komponen Aplikasi Utama yang sekarang berada di dalam AuthProvider
-const MainApp: React.FC = () => {
+// Komponen untuk Pengurus/Admin
+const AdminDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
-  const toggleSidebar = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  const handleLogout = async () => {
-    if (confirm("Apakah Anda yakin ingin keluar?")) {
-      await signOut(auth);
-    }
-  };
+  const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
+  const handleLogout = async () => { if (confirm("Yakin ingin keluar?")) await signOut(auth); };
   
-  // Jika tidak ada pengguna yang login, tampilkan halaman Login
-  if (!currentUser) {
-    return <Login />;
-  }
-
-  // Jika sudah login, tampilkan aplikasi lengkap
   const renderView = () => {
     switch (activeView) {
       case 'Dashboard': return <Dashboard />;
@@ -58,48 +46,66 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-light text-gray-800">
-      <Sidebar 
-        activeView={activeView} 
-        setActiveView={setActiveView} 
-        isOpen={isSidebarOpen} 
-      />
+      <Sidebar activeView={activeView} setActiveView={setActiveView} isOpen={isSidebarOpen} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
-            <div className="flex items-center">
-                <button onClick={toggleSidebar} className="text-gray-500 hover:text-primary focus:outline-none">
-                    <MenuIcon className="w-6 h-6" />
-                </button>
-            </div>
+        <header className="bg-white shadow-sm h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8">
+            <button onClick={toggleSidebar} className="text-gray-500 hover:text-primary focus:outline-none"><MenuIcon className="w-6 h-6" /></button>
             <div className="flex items-center space-x-4">
-                <span className="text-sm text-gray-600 hidden sm:block">{currentUser.email}</span>
-                <button onClick={handleLogout} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
-                    Logout
-                </button>
+                <span className="text-sm text-gray-600 hidden sm:block">{currentUser?.email}</span>
+                <button onClick={handleLogout} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">Logout</button>
             </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto">
-          <div className="max-w-7xl mx-auto">
-             {renderView()}
-          </div>
+          <div className="max-w-7xl mx-auto">{renderView()}</div>
         </main>
       </div>
     </div>
   );
 };
 
+// Komponen "Gerbang" yang menentukan tampilan
+const AppGate: React.FC = () => {
+    const { currentUser, userProfile, loading } = useAuth();
 
-// Komponen App utama sekarang hanya bertugas menyediakan "Provider"
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen">Memuat...</div>;
+    }
+
+    if (!currentUser) {
+        return <Login />;
+    }
+
+    if (userProfile?.role === 'anggota') {
+        return <MemberPortal />;
+    }
+
+    if (userProfile?.role === 'admin' || userProfile?.role === 'pengurus') {
+        return <AdminDashboard />;
+    }
+
+    // Tampilan default jika peran tidak dikenali (atau belum diatur)
+    return (
+        <div className="p-4 text-center">
+            <p>Peran Anda belum diatur.</p>
+            <p className="text-sm text-gray-600">Silakan hubungi admin untuk mendapatkan hak akses.</p>
+            <button onClick={async () => await signOut(auth)} className="mt-4 px-4 py-2 bg-secondary text-white rounded-md">Logout</button>
+        </div>
+    );
+};
+
+// Komponen App utama
 const App: React.FC = () => {
   return (
     <AuthProvider>
       <SettingsProvider>
-        <MainApp />
+        <AppGate />
       </SettingsProvider>
     </AuthProvider>
   );
 };
 
 export default App;
+
 
 
 
