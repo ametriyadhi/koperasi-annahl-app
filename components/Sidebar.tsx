@@ -1,4 +1,5 @@
 import React from 'react';
+import { useAuth } from './AuthContext'; // <-- Impor hook auth
 import { HomeIcon, UsersIcon, WalletIcon, HandshakeIcon, BookIcon, ChartIcon, SettingsIcon, LogoIcon } from './icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
@@ -9,20 +10,23 @@ interface SidebarProps {
   isOpen: boolean;
 }
 
-const navItems = [
-  { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard' },
-  { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota' },
-  { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan' },
-  { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah' },
-  { name: 'Simulator', icon: ChartIcon, view: 'Simulator' },
-  { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan' }, // <-- MENU BARU
-  { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi' },
-  { name: 'Laporan', icon: ChartIcon, view: 'Laporan' },
-  { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan' },
-];
-
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
-  // ... (sisa kode Sidebar.tsx tetap sama, tidak perlu diubah)
+  const { userProfile } = useAuth(); // <-- Dapatkan profil pengguna
+
+  const navItems = [
+    { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard', roles: ['admin', 'pengurus'] },
+    { name: 'Anggota & Unit', icon: UsersIcon, view: 'Anggota', roles: ['admin', 'pengurus'] },
+    { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan', roles: ['admin', 'pengurus'] },
+    { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah', roles: ['admin', 'pengurus'] },
+    { name: 'Simulator', icon: ChartIcon, view: 'Simulator', roles: ['admin', 'pengurus'] },
+    { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan', roles: ['admin'] }, // <-- Hanya admin
+    { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi', roles: ['admin', 'pengurus'] },
+    { name: 'Laporan', icon: ChartIcon, view: 'Laporan', roles: ['admin', 'pengurus'] },
+    { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan', roles: ['admin'] }, // <-- Hanya admin
+  ];
+
+  const accessibleNavItems = navItems.filter(item => userProfile && item.roles.includes(userProfile.role));
+
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
       <div className={`h-20 flex items-center justify-center border-b bg-primary text-white`}>
@@ -36,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
         )}
       </div>
       <nav className={`flex-1 py-6 space-y-2 ${isOpen ? 'px-4' : 'px-2'}`}>
-        {navItems.map((item) => (
+        {accessibleNavItems.map((item) => (
           <button
             key={item.name}
             title={isOpen ? '' : item.name}
@@ -60,4 +64,5 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
 
