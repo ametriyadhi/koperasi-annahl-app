@@ -2,14 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 import type { AppSettings } from '../types';
+import AccessControl from './AccessControl';
+
+type SettingsTab = 'Kebijakan' | 'Hak Akses';
 
 const Settings: React.FC = () => {
   const { settings, loading, saveSettings } = useSettings();
+  const [activeTab, setActiveTab] = useState<SettingsTab>('Kebijakan');
   const [formState, setFormState] = useState<AppSettings>(settings);
 
   useEffect(() => {
-    setFormState(settings);
-  }, [settings]);
+    if (!loading) {
+      setFormState(settings);
+    }
+  }, [settings, loading]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -22,28 +28,47 @@ const Settings: React.FC = () => {
   };
 
   if (loading) {
-    return <p>Memuat pengaturan...</p>;
+    return (
+        <Card title="Pengaturan Sistem">
+            <p className="p-6">Memuat pengaturan...</p>
+        </Card>
+    );
   }
 
   return (
     <div>
       <h2 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Sistem</h2>
-      <div className="space-y-8">
-        <Card title="Kebijakan Simpanan">
-          <div className="p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-600">Jumlah Simpanan Pokok (Rp)</label>
-              <input type="number" name="simpanan_pokok" value={formState.simpanan_pokok || ''} onChange={handleInputChange} className="w-48 p-2 border border-gray-300 rounded-md shadow-sm" />
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="text-sm text-gray-600">Jumlah Simpanan Wajib Bulanan (Rp)</label>
-              <input type="number" name="simpanan_wajib" value={formState.simpanan_wajib || ''} onChange={handleInputChange} className="w-48 p-2 border border-gray-300 rounded-md shadow-sm" />
-            </div>
-          </div>
-          <div className="bg-gray-50 px-6 py-3 flex justify-end">
-            <button onClick={() => handleSave('Kebijakan Simpanan')} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-lime-600">Simpan Perubahan</button>
-          </div>
-        </Card>
+      <div className="mb-6 border-b border-gray-200">
+          <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+              {(['Kebijakan', 'Hak Akses'] as SettingsTab[]).map((tab) => (
+                  <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`shrink-0 ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}
+                  >
+                      {tab}
+                  </button>
+              ))}
+          </nav>
+      </div>
+      
+      {activeTab === 'Kebijakan' && (
+        <div className="space-y-8">
+            <Card title="Kebijakan Simpanan">
+                <div className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-600">Jumlah Simpanan Pokok (Rp)</label>
+                        <input type="number" name="simpanan_pokok" value={formState.simpanan_pokok || ''} onChange={handleInputChange} className="w-48 p-2 border border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <label className="text-sm text-gray-600">Jumlah Simpanan Wajib Bulanan (Rp)</label>
+                        <input type="number" name="simpanan_wajib" value={formState.simpanan_wajib || ''} onChange={handleInputChange} className="w-48 p-2 border border-gray-300 rounded-md shadow-sm" />
+                    </div>
+                </div>
+                <div className="bg-gray-50 px-6 py-3 flex justify-end">
+                    <button onClick={() => handleSave('Kebijakan Simpanan')} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-lime-600">Simpan Perubahan</button>
+                </div>
+            </Card>
 
         <Card title="Kebijakan Margin Pembiayaan">
           <div className="p-6 space-y-4">
