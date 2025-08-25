@@ -1,5 +1,5 @@
-import React from 'react';
-import { useAuth } from './AuthContext'; // <-- Impor hook auth
+import React, { useMemo } from 'react';
+import { useAuth } from './AuthContext';
 import { HomeIcon, UsersIcon, WalletIcon, HandshakeIcon, BookIcon, ChartIcon, SettingsIcon, LogoIcon } from './icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
@@ -11,7 +11,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) => {
-  const { userProfile } = useAuth(); // <-- Dapatkan profil pengguna
+  const { userProfile } = useAuth();
 
   const navItems = [
     { name: 'Dashboard', icon: HomeIcon, view: 'Dashboard', roles: ['admin', 'pengurus'] },
@@ -19,13 +19,18 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
     { name: 'Simpanan', icon: WalletIcon, view: 'Simpanan', roles: ['admin', 'pengurus'] },
     { name: 'Murabahah', icon: HandshakeIcon, view: 'Murabahah', roles: ['admin', 'pengurus'] },
     { name: 'Simulator', icon: ChartIcon, view: 'Simulator', roles: ['admin', 'pengurus'] },
-    { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan', roles: ['admin'] }, // <-- Hanya admin
+    { name: 'Proses Bulanan', icon: BookIcon, view: 'Proses Bulanan', roles: ['admin'] },
     { name: 'Akuntansi', icon: BookIcon, view: 'Akuntansi', roles: ['admin', 'pengurus'] },
     { name: 'Laporan', icon: ChartIcon, view: 'Laporan', roles: ['admin', 'pengurus'] },
-    { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan', roles: ['admin'] }, // <-- Hanya admin
+    { name: 'Pengaturan', icon: SettingsIcon, view: 'Pengaturan', roles: ['admin'] },
   ];
 
-  const accessibleNavItems = navItems.filter(item => userProfile && item.roles.includes(userProfile.role));
+  const accessibleNavItems = useMemo(() => {
+    if (!userProfile || !userProfile.role) {
+      return [];
+    }
+    return navItems.filter(item => item.roles.includes(userProfile.role));
+  }, [userProfile]);
 
   return (
     <aside className={`flex-shrink-0 bg-white shadow-lg flex flex-col transition-all duration-300 ease-in-out ${isOpen ? 'w-64' : 'w-20'}`}>
@@ -64,5 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView, isOpen }) 
 };
 
 export default Sidebar;
+
 
 
