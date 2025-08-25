@@ -5,7 +5,7 @@ import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
 import Login from './components/Login';
-import MemberPortal from './components/MemberPortal'; // <-- Impor Portal Anggota
+import MemberPortal from './components/MemberPortal';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Members from './components/Members';
@@ -20,7 +20,6 @@ import { MenuIcon } from './components/icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
-// Komponen untuk Pengurus/Admin
 const AdminDashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const [activeView, setActiveView] = useState<ViewType>('Dashboard');
@@ -48,7 +47,8 @@ const AdminDashboard: React.FC = () => {
     <div className="flex h-screen bg-light text-gray-800">
       <Sidebar activeView={activeView} setActiveView={setActiveView} isOpen={isSidebarOpen} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-white shadow-sm h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8">
+        {/* --- PERUBAHAN DI SINI --- */}
+        <header className="bg-gray-50 border-b border-gray-200 h-20 flex items-center justify-between px-4 sm:px-6 lg:px-8 flex-shrink-0">
             <button onClick={toggleSidebar} className="text-gray-500 hover:text-primary focus:outline-none"><MenuIcon className="w-6 h-6" /></button>
             <div className="flex items-center space-x-4">
                 <span className="text-sm text-gray-600 hidden sm:block">{currentUser?.email}</span>
@@ -63,7 +63,6 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-// Komponen "Gerbang" yang menentukan tampilan
 const AppGate: React.FC = () => {
     const { currentUser, userProfile, loading } = useAuth();
 
@@ -83,7 +82,6 @@ const AppGate: React.FC = () => {
         return <AdminDashboard />;
     }
 
-    // Tampilan default jika peran tidak dikenali (atau belum diatur)
     return (
         <div className="p-4 text-center">
             <p>Peran Anda belum diatur.</p>
@@ -93,7 +91,6 @@ const AppGate: React.FC = () => {
     );
 };
 
-// Komponen App utama
 const App: React.FC = () => {
   return (
     <AuthProvider>
@@ -105,7 +102,4 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-
 
