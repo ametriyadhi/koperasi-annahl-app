@@ -64,7 +64,6 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
           const tenor = Number(row.tenor);
           const cicilan_terbayar = Number(row.cicilan_terbayar) || 0;
 
-          // --- VALIDASI BARU YANG LEBIH KETAT ---
           if (isNaN(harga_pokok) || harga_pokok <= 0) {
             localErrors.push(`Baris ${rowNum}: 'harga_pokok' harus berupa angka lebih dari 0.`);
             return;
@@ -169,7 +168,6 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
       {validData.length > 0 && (
         <div className="mt-4">
           <h4 className="font-semibold">Pratinjau Data ({validData.length} baris valid)</h4>
-          {/* Pratinjau bisa ditambahkan di sini jika perlu */}
         </div>
       )}
 
@@ -190,3 +188,4 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 };
 
 export default MurabahahImporter;
+
