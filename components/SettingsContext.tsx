@@ -9,7 +9,6 @@ interface SettingsContextType {
   saveSettings: (newSettings: AppSettings) => Promise<void>;
 }
 
-// --- NILAI DEFAULT BARU DITAMBAHKAN DI SINI ---
 const defaultSettings: AppSettings = {
   simpanan_pokok: 500000,
   simpanan_wajib: 50000,
@@ -42,7 +41,6 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     const settingsRef = doc(db, "pengaturan", settingsDocId);
     const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
       if (docSnap.exists()) {
-        // Gabungkan data dari DB dengan default untuk memastikan semua field ada
         setSettings({ ...defaultSettings, ...docSnap.data() });
       } else {
         console.log("Dokumen pengaturan tidak ditemukan, membuat yang baru...");
