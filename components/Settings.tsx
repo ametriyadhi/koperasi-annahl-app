@@ -1,64 +1,68 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { useSettings } from './SettingsContext'; // <-- Gunakan hook kita
+import Card from './shared/Card';
 import type { AppSettings } from '../types';
 
-// Tipe untuk data yang disediakan oleh context
-interface SettingsContextType {
-  settings: AppSettings;
-  loading: boolean;
-  saveSettings: (newSettings: AppSettings) => Promise<void>;
-}
-
-// Nilai default untuk context
-const defaultSettings: AppSettings = {
-  simpanan_pokok: 150000, // Nilai default jika di database kosong
-  simpanan_wajib: 50000,
-};
-
-const SettingsContext = createContext<SettingsContextType>({
-  settings: defaultSettings,
-  loading: true,
-  saveSettings: async () => {},
-});
-
-// Hook custom untuk mempermudah penggunaan context
-export const useSettings = () => useContext(SettingsContext);
-
-// Provider yang akan membungkus aplikasi kita
-export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
-  
-  // ID dokumen yang pasti untuk pengaturan kita
-  const settingsDocId = "main_settings";
+const Settings: React.FC = () => {
+  const { settings, loading, saveSettings } = useSettings();
+  const [formState, setFormState] = useState<AppSettings>(settings);
 
   useEffect(() => {
-    const settingsRef = doc(db, "pengaturan", settingsDocId);
-    const unsubscribe = onSnapshot(settingsRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setSettings(docSnap.data() as AppSettings);
-      } else {
-        // Jika dokumen belum ada, buat dengan nilai default
-        console.log("Dokumen pengaturan tidak ditemukan, membuat yang baru...");
-        setDoc(settingsRef, defaultSettings);
-      }
-      setLoading(false);
-    });
+    // Sinkronkan form dengan data dari context saat pertama kali dimuat atau berubah
+    setFormState(settings);
+  }, [settings]);
 
-    return () => unsubscribe();
-  }, []);
-
-  const saveSettings = async (newSettings: AppSettings) => {
-    const settingsRef = doc(db, "pengaturan", settingsDocId);
-    await setDoc(settingsRef, newSettings, { merge: true });
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormState(prev => ({ ...prev, [name]: Number(value) }));
   };
 
-  const value = { settings, loading, saveSettings };
+  const handleSave = async (section: string) => {
+    await saveSettings(formState);
+    alert(`Pengaturan untuk "${section}" telah berhasil disimpan!`);
+  };
+
+  if (loading) {
+    return <p>Memuat pengaturan...</p>;
+  }
 
   return (
-    <SettingsContext.Provider value={value}>
-      {children}
-    </SettingsContext.Provider>
+    <div>
+      <h2 className="text-3xl font-bold text-gray-800 mb-6">Pengaturan Sistem</h2>
+      <div className="space-y-8">
+        <Card title="Kebijakan Simpanan">
+          <div className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-600">Jumlah Simpanan Pokok (Rp)</label>
+              <input
+                  type="number"
+                  name="simpanan_pokok"
+                  value={formState.simpanan_pokok || ''}
+                  onChange={handleInputChange}
+                  className="w-48 p-2 border border-gray-300 rounded-md shadow-sm"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm text-gray-600">Jumlah Simpanan Wajib Bulanan (Rp)</label>
+              <input
+                  type="number"
+                  name="simpanan_wajib"
+                  value={formState.simpanan_wajib || ''}
+                  onChange={handleInputChange}
+                  className="w-48 p-2 border border-gray-300 rounded-md shadow-sm"
+              />
+            </div>
+          </div>
+          <div className="bg-gray-50 px-6 py-3 flex justify-end">
+            <button onClick={() => handleSave('Kebijakan Simpanan')} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-lime-600">
+                Simpan Perubahan
+            </button>
+          </div>
+        </Card>
+        {/* Di sini kita bisa menambahkan kartu pengaturan lain seperti Margin, SHU, dll. */}
+      </div>
+    </div>
   );
 };
+
+export default Settings;
