@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Akun, JurnalEntryLine } from '../types';
@@ -22,19 +22,13 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
     return (
         <tr className={isParent ? "bg-gray-100 font-bold" : "hover:bg-gray-50"}>
             <td className="px-6 py-3 whitespace-nowrap" style={{ paddingLeft: `${paddingLeft}px` }}>
-                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>
-                    {akun.kode}
-                </div>
+                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>{akun.kode}</div>
             </td>
             <td className="px-6 py-3 whitespace-nowrap">
-                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>
-                    {akun.nama}
-                </div>
+                <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>{akun.nama}</div>
             </td>
             <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{akun.tipe}</td>
-            <td className="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-800">
-                {formatCurrency(akun.saldo)}
-            </td>
+            <td className="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-800">{formatCurrency(akun.saldo)}</td>
             <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
                 <button onClick={() => onEdit(akun)} className="text-primary hover:text-amber-600">Edit</button>
                 <button onClick={() => onDelete(akun.id)} className="text-red-600 hover:text-red-800">Hapus</button>
@@ -61,17 +55,17 @@ const Accounting: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleOpenAccountModal = (akun: Akun | null = null) => {
+    const handleOpenAccountModal = useCallback((akun: Akun | null = null) => {
         setEditingAccount(akun);
         setIsAccountModalOpen(true);
-    };
+    }, []);
 
-    const handleCloseAccountModal = () => {
+    const handleCloseAccountModal = useCallback(() => {
         setIsAccountModalOpen(false);
         setEditingAccount(null);
-    };
+    }, []);
 
-    const handleSaveAccount = async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
+    const handleSaveAccount = useCallback(async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
         try {
             if (editingAccount) {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
@@ -84,9 +78,9 @@ const Accounting: React.FC = () => {
             console.error("Error saving account: ", error);
             alert("Gagal menyimpan akun.");
         }
-    };
+    }, [editingAccount, handleCloseAccountModal]);
 
-    const handleDeleteAccount = async (id: string) => {
+    const handleDeleteAccount = useCallback(async (id: string) => {
         if (confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
             try {
                 await deleteDoc(doc(db, "chart_of_accounts", id));
@@ -95,17 +89,14 @@ const Accounting: React.FC = () => {
                 alert("Gagal menghapus akun.");
             }
         }
-    };
+    }, []);
 
-    // --- FUNGSI YANG DIPERBAIKI ---
-    const handleSaveManualJournal = async (deskripsi: string, lines: JurnalEntryLine[]) => {
+    const handleSaveManualJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[]) => {
         try {
             await runTransaction(db, async (transaction) => {
-                // --- TAHAP 1: BACA SEMUA DATA TERLEBIH DAHULU ---
                 const accountRefs = lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
                 const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
 
-                // --- TAHAP 2: LAKUKAN SEMUA PENULISAN DATA ---
                 const jurnalRef = doc(collection(db, "jurnal_umum"));
                 transaction.set(jurnalRef, {
                     tanggal: new Date().toISOString(),
@@ -117,9 +108,7 @@ const Accounting: React.FC = () => {
                     const line = lines[i];
                     const accDoc = accountDocs[i];
                     
-                    if (!accDoc.exists()) {
-                        throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
-                    }
+                    if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
                     
                     const currentSaldo = accDoc.data().saldo || 0;
                     const newSaldo = currentSaldo + line.debit - line.kredit;
@@ -132,16 +121,25 @@ const Accounting: React.FC = () => {
             console.error("Gagal menyimpan jurnal manual: ", error);
             alert(`Terjadi kesalahan: ${error}`);
         }
-    };
+    }, []);
 
-    const renderAccounts = (parentId: string | undefined = undefined, level = 0) => {
-        return accounts
-            .filter(a => a.parent_kode === parentId)
-            .flatMap(akun => [
-                <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
-                ...renderAccounts(akun.kode, level + 1)
-            ]);
-    };
+    const renderedAccountTree = useMemo(() => {
+        const renderRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
+            return allAccounts
+                .filter(a => a.parent_kode === parentId)
+                .flatMap(akun => [
+                    <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
+                    ...renderRecursively(akun.kode, allAccounts, level + 1)
+                ]);
+        };
+
+        const topLevelAccounts = accounts.filter(a => !a.parent_kode);
+        return topLevelAccounts.flatMap(parent => [
+            <AccountRow key={parent.id} akun={parent} level={0} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
+            ...renderRecursively(parent.kode, accounts, 1)
+        ]);
+    }, [accounts, handleOpenAccountModal, handleDeleteAccount]);
+
 
     return (
         <>
@@ -167,7 +165,7 @@ const Accounting: React.FC = () => {
                 <Card>
                     <div className="flex justify-between items-center p-4 sm:p-6 border-b">
                         <h3 className="text-lg font-semibold text-gray-800">Bagan Akun (Chart of Accounts)</h3>
-                        <button onClick={() => handleOpenAccountModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                        <button onClick={() => handleOpenAccountModal(null)} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
                             <PlusCircleIcon className="w-5 h-5 mr-2" />
                             Tambah Akun
                         </button>
@@ -184,7 +182,7 @@ const Accounting: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white">
-                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderAccounts()}
+                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderedAccountTree}
                             </tbody>
                         </table>
                     </div>
@@ -225,5 +223,8 @@ const Accounting: React.FC = () => {
         </>
     );
 };
+
+export default Accounting;
+
 
 export default Accounting;
