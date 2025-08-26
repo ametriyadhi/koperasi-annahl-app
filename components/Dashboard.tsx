@@ -1,50 +1,98 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+imimport React, { useState, useEffect, useMemo } from 'react';
+import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Anggota } from '../types';
-import Card from './shared/Card';
-import { MOCK_KONTRAK, MOCK_ANGGOTA } from '../constants'; // Membutuhkan MOCK_ANGGOTA untuk bagian statis
+import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
+import Card from './shared/Card';
 
+// Fungsi helper untuk memformat angka menjadi format mata uang Rupiah.
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 }
 
 const Dashboard: React.FC = () => {
+    // State untuk menyimpan daftar anggota dan kontrak dari Firestore.
     const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
+    const [kontrakList, setKontrakList] = useState<KontrakMurabahah[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // useEffect untuk mengambil data anggota dan kontrak secara real-time dari Firestore.
     useEffect(() => {
-        const unsubscribe = onSnapshot(collection(db, "anggota"), (snapshot) => {
+        // Listener untuk koleksi 'anggota'
+        const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
             const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Anggota[];
             setAnggotaList(members);
-            setLoading(false);
         });
-        return () => unsubscribe();
+
+        // Listener untuk koleksi 'kontrak_murabahah'
+        const unsubKontrak = onSnapshot(collection(db, "kontrak_murabahah"), (snapshot) => {
+            const contracts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as KontrakMurabahah[];
+            setKontrakList(contracts);
+        });
+
+        // Set loading menjadi false setelah kedua listener aktif (meskipun data mungkin masih masuk).
+        // Dalam aplikasi nyata, Anda mungkin ingin state loading yang lebih canggih.
+        setLoading(false);
+
+        // Fungsi cleanup untuk berhenti mendengarkan perubahan saat komponen di-unmount.
+        return () => {
+            unsubAnggota();
+            unsubKontrak();
+        };
     }, []);
 
+    // useMemo untuk menghitung metrik utama. Kalkulasi ini hanya akan berjalan kembali
+    // jika data anggotaList atau kontrakList berubah.
     const dashboardMetrics = useMemo(() => {
+        // Menghitung jumlah anggota dengan status 'Aktif'.
         const totalAnggotaAktif = anggotaList.filter(a => a.status === 'Aktif').length;
+        
+        // Menjumlahkan semua jenis simpanan dari semua anggota.
         const totalSimpanan = anggotaList.reduce((acc, member) => {
             return acc + (member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0);
         }, 0);
-        const outstandingMurabahah = MOCK_KONTRAK.filter(k => k.status === StatusKontrak.BERJALAN).reduce((acc, k) => {
-            return acc + k.harga_jual - k.uang_muka;
-        }, 0);
-        const npf = MOCK_KONTRAK.filter(k => k.status === StatusKontrak.MACET).length;
+
+        // Menghitung total pembiayaan yang masih berjalan (outstanding).
+        const outstandingMurabahah = kontrakList
+            .filter(k => k.status === StatusKontrak.BERJALAN)
+            .reduce((acc, k) => {
+                const sisaHutang = (k.harga_jual - k.uang_muka) - (k.cicilan_terbayar * k.cicilan_per_bulan);
+                return acc + Math.max(0, sisaHutang); // Pastikan tidak negatif
+            }, 0);
+
+        // Menghitung jumlah pembiayaan yang macet.
+        const npf = kontrakList.filter(k => k.status === StatusKontrak.MACET).length;
+
         return { totalAnggotaAktif, totalSimpanan, outstandingMurabahah, npf };
+    }, [anggotaList, kontrakList]);
+
+    // useMemo untuk menyiapkan 5 kontrak pembiayaan terbaru.
+    const recentKontrak = useMemo(() => {
+        return [...kontrakList]
+            .sort((a, b) => new Date(b.tanggal_akad).getTime() - new Date(a.tanggal_akad).getTime())
+            .slice(0, 5);
+    }, [kontrakList]);
+
+    // useMemo untuk menyiapkan 5 anggota yang baru bergabung.
+    const recentAnggota = useMemo(() => {
+        return [...anggotaList]
+            .sort((a, b) => new Date(b.tgl_gabung).getTime() - new Date(a.tgl_gabung).getTime())
+            .slice(0, 5);
     }, [anggotaList]);
 
+
+    // Data untuk kartu KPI (Key Performance Indicator) di bagian atas.
     const kpiData = [
         { title: 'Anggota Aktif', value: loading ? '...' : dashboardMetrics.totalAnggotaAktif.toString(), description: 'Total anggota terdaftar' },
         { title: 'Total Simpanan', value: loading ? '...' : formatCurrency(dashboardMetrics.totalSimpanan), description: 'Pokok, Wajib, & Sukarela' },
-        { title: 'Outstanding Murabahah', value: formatCurrency(dashboardMetrics.outstandingMurabahah), description: 'Total pembiayaan berjalan (data statis)' },
-        { title: 'Pembiayaan Bermasalah (NPF)', value: dashboardMetrics.npf.toString(), description: 'Kontrak macet (data statis)' },
+        { title: 'Outstanding Murabahah', value: loading ? '...' : formatCurrency(dashboardMetrics.outstandingMurabahah), description: 'Total sisa pembiayaan berjalan' },
+        { title: 'Pembiayaan Bermasalah (NPF)', value: loading ? '...' : dashboardMetrics.npf.toString(), description: 'Jumlah kontrak macet' },
     ];
 
   return (
     <div>
         <h2 className="text-3xl font-bold text-gray-800 mb-6">Dashboard</h2>
+        {/* Bagian Kartu KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {kpiData.map(kpi => (
                  <div key={kpi.title} className="bg-white p-6 rounded-xl shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow duration-300">
@@ -60,7 +108,8 @@ const Dashboard: React.FC = () => {
         </div>
         
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card title="Ringkasan Pembiayaan Terbaru (Data Statis)">
+            {/* Bagian Ringkasan Pembiayaan Terbaru (Dinamis) */}
+            <Card title="Ringkasan Pembiayaan Terbaru">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -72,11 +121,11 @@ const Dashboard: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {MOCK_KONTRAK.slice(0, 5).map(k => {
-                                const anggota = MOCK_ANGGOTA.find(a => a.id === k.anggota_id);
+                            {recentKontrak.map(k => {
+                                const anggota = anggotaList.find(a => a.id === k.anggota_id);
                                 return (
                                 <tr key={k.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{anggota?.nama}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{anggota?.nama || '...'}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{k.nama_barang}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 font-medium">{formatCurrency(k.harga_jual)}</td>
                                     <td className="px-4 py-3 whitespace-nowrap text-sm">
@@ -92,15 +141,18 @@ const Dashboard: React.FC = () => {
                     </table>
                 </div>
             </Card>
-            <Card title="Aktivitas Simpanan Terakhir (Data Statis)">
+            {/* Bagian Aktivitas diganti menjadi Anggota Baru (Dinamis) */}
+            <Card title="Anggota Baru Bergabung">
                  <ul className="divide-y divide-gray-200">
-                     {MOCK_ANGGOTA.slice(0,5).map(a => (
+                     {recentAnggota.map(a => (
                          <li key={a.id} className="py-3 flex justify-between items-center">
                              <div>
                                  <p className="text-sm font-medium text-gray-900">{a.nama}</p>
-                                 <p className="text-sm text-gray-500">Setoran Wajib - {new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' })}</p>
+                                 <p className="text-sm text-gray-500">Unit: {a.unit}</p>
                              </div>
-                             <p className="text-sm font-medium text-green-600">+ {formatCurrency(100000)}</p>
+                             <p className="text-sm font-medium text-gray-600">
+                                {new Date(a.tgl_gabung).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                             </p>
                          </li>
                      ))}
                  </ul>
@@ -111,5 +163,6 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+
 
 
