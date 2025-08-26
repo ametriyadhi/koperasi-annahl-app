@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Akun, JurnalEntryLine } from '../types';
+import type { Akun, JurnalEntry, JurnalEntryLine } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import AccountForm from './AccountForm';
@@ -107,9 +107,7 @@ const Accounting: React.FC = () => {
                 for (let i = 0; i < lines.length; i++) {
                     const line = lines[i];
                     const accDoc = accountDocs[i];
-                    
                     if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
-                    
                     const currentSaldo = accDoc.data().saldo || 0;
                     const newSaldo = currentSaldo + line.debit - line.kredit;
                     transaction.update(accountRefs[i], { saldo: newSaldo });
@@ -119,6 +117,38 @@ const Accounting: React.FC = () => {
             setIsJournalModalOpen(false);
         } catch (error) {
             console.error("Gagal menyimpan jurnal manual: ", error);
+            alert(`Terjadi kesalahan: ${error}`);
+        }
+    }, []);
+
+    const handleDeleteJurnal = useCallback(async (jurnalId: string) => {
+        if (!confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const jurnalRef = doc(db, "jurnal_umum", jurnalId);
+                const jurnalDoc = await transaction.get(jurnalRef);
+                if (!jurnalDoc.exists()) throw new Error("Jurnal tidak ditemukan!");
+
+                const jurnalData = jurnalDoc.data() as JurnalEntry;
+
+                const accountRefs = jurnalData.lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
+                const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
+
+                for (let i = 0; i < jurnalData.lines.length; i++) {
+                    const line = jurnalData.lines[i];
+                    const accDoc = accountDocs[i];
+                    if (accDoc.exists()) {
+                        const currentSaldo = accDoc.data().saldo || 0;
+                        const newSaldo = currentSaldo - line.debit + line.kredit;
+                        transaction.update(accountRefs[i], { saldo: newSaldo });
+                    }
+                }
+                transaction.delete(jurnalRef);
+            });
+            alert("Jurnal berhasil dihapus dan saldo telah dikembalikan.");
+        } catch (error) {
+            console.error("Gagal menghapus jurnal: ", error);
             alert(`Terjadi kesalahan: ${error}`);
         }
     }, []);
@@ -199,7 +229,7 @@ const Accounting: React.FC = () => {
                         </button>
                     </div>
                     <div className="p-6">
-                        <JurnalUmum />
+                        <JurnalUmum onDelete={handleDeleteJurnal} />
                     </div>
                 </Card>
             )}
@@ -226,5 +256,3 @@ const Accounting: React.FC = () => {
 
 export default Accounting;
 
-
-export default Accounting;
