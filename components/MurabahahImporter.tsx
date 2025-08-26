@@ -12,6 +12,7 @@ interface MurabahahImporterProps {
   anggotaList: Anggota[];
 }
 
+// Template CSV hanya memerlukan data input mentah.
 const REQUIRED_HEADERS = ['nip_anggota', 'nama_barang', 'harga_pokok', 'uang_muka', 'tenor', 'tanggal_akad', 'cicilan_terbayar'];
 
 const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImportSuccess, anggotaList }) => {
@@ -63,8 +64,8 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
           const harga_pokok = Number(row.harga_pokok);
           const tenor = Number(row.tenor);
           const cicilan_terbayar = Number(row.cicilan_terbayar) || 0;
+          const uang_muka = Number(row.uang_muka) || 0;
 
-          // --- VALIDASI BARU YANG LEBIH KETAT ---
           if (isNaN(harga_pokok) || harga_pokok <= 0) {
             localErrors.push(`Baris ${rowNum}: 'harga_pokok' harus berupa angka lebih dari 0.`);
             return;
@@ -78,6 +79,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
             return;
           }
           
+          // --- KALKULASI OTOMATIS BERDASARKAN PENGATURAN ---
           let marginPersen;
           if (tenor <= 6) marginPersen = settings.margin_tenor_6;
           else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
@@ -86,7 +88,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 
           const margin = harga_pokok * (marginPersen / 100);
           const harga_jual = harga_pokok + margin;
-          const cicilan_per_bulan = (harga_jual - (Number(row.uang_muka) || 0)) / tenor;
+          const cicilan_per_bulan = (harga_jual - uang_muka) / tenor;
 
           localValidData.push({
             anggota_id: anggotaId,
@@ -94,7 +96,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
             harga_pokok,
             margin,
             harga_jual,
-            uang_muka: Number(row.uang_muka) || 0,
+            uang_muka,
             tenor,
             cicilan_per_bulan,
             tanggal_akad: row.tanggal_akad || new Date().toISOString().split('T')[0],
@@ -145,6 +147,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
     <div className="p-2">
       <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg space-y-4">
         <h4 className="font-semibold text-gray-700">Langkah 1: Unduh dan Isi Template</h4>
+        <p className="text-sm text-gray-600">Gunakan template ini untuk memastikan data input Anda benar.</p>
         <button onClick={handleDownloadTemplate} className="text-sm font-medium text-primary hover:underline">
           Unduh Template CSV
         </button>
@@ -155,7 +158,7 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
         <input type="file" accept=".csv" onChange={handleFileChange} className="text-sm" />
       </div>
 
-      {isProcessing && <p className="mt-4">Memproses file...</p>}
+      {isProcessing && <p className="mt-4 text-center">Memproses file...</p>}
       
       {errors.length > 0 && (
         <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg">
@@ -166,9 +169,10 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
         </div>
       )}
 
-      {validData.length > 0 && (
+      {validData.length > 0 && errors.length === 0 && (
         <div className="mt-4">
-          <h4 className="font-semibold">Pratinjau Data ({validData.length} baris valid)</h4>
+          <h4 className="font-semibold text-green-700">Pratinjau Data</h4>
+          <p className="text-sm text-gray-600">{validData.length} baris data valid dan siap untuk diimpor.</p>
         </div>
       )}
 
@@ -189,5 +193,4 @@ const MurabahahImporter: React.FC<MurabahahImporterProps> = ({ onClose, onImport
 };
 
 export default MurabahahImporter;
-
 
