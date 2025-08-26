@@ -14,12 +14,8 @@ const formatCurrency = (value: number) => {
 };
 
 const tabs = [
-    StatusKontrak.BERJALAN,
-    StatusKontrak.REVIEW,
-    StatusKontrak.APPROVED,
-    StatusKontrak.AKAD,
-    StatusKontrak.LUNAS,
-    StatusKontrak.MACET,
+    StatusKontrak.BERJALAN, StatusKontrak.REVIEW, StatusKontrak.APPROVED,
+    StatusKontrak.AKAD, StatusKontrak.LUNAS, StatusKontrak.MACET,
 ];
 
 const Murabahah: React.FC = () => {
@@ -40,10 +36,7 @@ const Murabahah: React.FC = () => {
             setKontrakList(contracts);
             setLoading(false);
         });
-        return () => {
-            unsubAnggota();
-            unsubKontrak();
-        };
+        return () => { unsubAnggota(); unsubKontrak(); };
     }, []);
 
     const handleOpenFormModal = (kontrak: KontrakMurabahah | null = null) => {
@@ -56,9 +49,7 @@ const Murabahah: React.FC = () => {
         setEditingKontrak(null);
     };
     
-    const handleCloseImportModal = () => {
-        setIsImportModalOpen(false);
-    };
+    const handleCloseImportModal = () => setIsImportModalOpen(false);
 
     const handleSaveKontrak = async (kontrakData: Omit<KontrakMurabahah, 'id'>) => {
         try {
@@ -68,23 +59,19 @@ const Murabahah: React.FC = () => {
                 await addDoc(collection(db, "kontrak_murabahah"), kontrakData);
             }
             handleCloseFormModal();
-        } catch (error) {
-            console.error("Error saving contract: ", error);
-        }
+        } catch (error) { console.error("Error saving contract: ", error); }
     };
 
     const handleDeleteKontrak = async (id: string) => {
         if (confirm("Apakah Anda yakin ingin menghapus kontrak ini?")) {
             try {
                 await deleteDoc(doc(db, "kontrak_murabahah", id));
-            } catch (error) {
-                console.error("Error deleting contract: ", error);
-            }
+            } catch (error) { console.error("Error deleting contract: ", error); }
         }
     };
 
     const filteredContracts = kontrakList.filter(k => k.status === activeTab);
-    const getAnggotaName = (anggotaId: string) => anggotaList.find(a => a.id === anggotaId)?.nama || 'N/A';
+    const getAnggotaInfo = (anggotaId: string) => anggotaList.find(a => a.id === anggotaId);
 
     return (
         <>
@@ -92,9 +79,7 @@ const Murabahah: React.FC = () => {
                 <div className="flex justify-between items-center p-4 sm:p-6 border-b">
                     <h3 className="text-lg font-semibold text-gray-800">Pembiayaan Murabahah</h3>
                     <div className="flex space-x-2">
-                        <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
-                            Import CSV
-                        </button>
+                        <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">Import CSV</button>
                         <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
                             <PlusCircleIcon className="w-5 h-5 mr-2" />
                             Tambah Pengajuan
@@ -112,34 +97,50 @@ const Murabahah: React.FC = () => {
                 </div>
                 <div className="overflow-x-auto">
                     {loading ? <p className="p-6 text-center">Memuat data...</p> : (
-                        <table className="min-w-full divide-y divide-gray-200">
+                        <table className="min-w-full divide-y divide-gray-200 text-xs">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Anggota</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Barang</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Debet Pokok</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Debet Margin</th>
-                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Sisa Cicilan</th>
-                                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                    <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Nama</th>
+                                    <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Unit</th>
+                                    <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Barang</th>
+                                    <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Tgl Realisasi</th>
+                                    <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Tenor</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Hrg Pokok</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Margin</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">DP</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angs. Pokok</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angs. Margin</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Total Angsuran</th>
+                                    <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Terbayar</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Sisa Cicilan</th>
+                                    <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredContracts.map((kontrak) => {
-                                    // --- RUMUS YANG DIPERBAIKI ---
+                                    const anggota = getAnggotaInfo(kontrak.anggota_id);
                                     const pokokSetelahDP = (kontrak.harga_pokok || 0) - (kontrak.uang_muka || 0);
-                                    const debetPokok = pokokSetelahDP / (kontrak.tenor || 1);
-                                    const debetMargin = (kontrak.margin || 0) / (kontrak.tenor || 1);
+                                    const angsuranPokok = pokokSetelahDP / (kontrak.tenor || 1);
+                                    const angsuranMargin = (kontrak.margin || 0) / (kontrak.tenor || 1);
                                     const hutangSetelahDP = (kontrak.harga_jual || 0) - (kontrak.uang_muka || 0);
                                     const sisaHutang = Math.max(0, hutangSetelahDP - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
                                     
                                     return (
                                         <tr key={kontrak.id} className="hover:bg-gray-50">
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{getAnggotaName(kontrak.anggota_id)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{kontrak.nama_barang}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">{formatCurrency(debetPokok)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-800 text-right">{formatCurrency(debetMargin)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800 text-right">{formatCurrency(sisaHutang)}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-medium space-x-2">
+                                            <td className="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{anggota?.nama || 'N/A'}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-gray-500">{anggota?.unit || 'N/A'}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-gray-500">{kontrak.nama_barang}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-gray-500">{new Date(kontrak.tanggal_akad).toLocaleDateString('id-ID')}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.tenor}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.harga_pokok)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.margin)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.uang_muka)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(angsuranPokok)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(angsuranMargin)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right font-bold text-gray-800">{formatCurrency(sisaHutang)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-center font-medium space-x-2">
                                                 <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
                                                 <button onClick={() => handleDeleteKontrak(kontrak.id)} className="text-red-600 hover:text-red-800">Hapus</button>
                                             </td>
@@ -167,6 +168,4 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
-
-
 
