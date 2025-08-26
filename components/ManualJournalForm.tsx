@@ -17,35 +17,38 @@ let nextId = 3;
 const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, accounts }) => {
     const [deskripsi, setDeskripsi] = useState('');
     const [lines, setLines] = useState([
-        { id: 1, akun_id: '', debit: 0, credit: 0 },
-        { id: 2, akun_id: '', debit: 0, credit: 0 },
+        { id: 1, akun_id: '', debit: 0, kredit: 0 },
+        { id: 2, akun_id: '', debit: 0, kredit: 0 },
     ]);
 
-    const handleLineChange = (id: number, field: 'akun_id' | 'debit' | 'credit', value: string | number) => {
+    const handleLineChange = (id: number, field: 'akun_id' | 'debit' | 'kredit', value: string) => {
         setLines(lines.map(line => {
-            if (line.id === id) {
-                 const numericValue = typeof value === 'string' && field !== 'akun_id' ? parseFloat(value) || 0 : value;
-                return { ...line, [field]: numericValue };
+            if (line.id !== id) return line;
+
+            if (field === 'akun_id') {
+                return { ...line, akun_id: value };
+            } else {
+                const numericValue = parseFloat(value);
+                return { ...line, [field]: isNaN(numericValue) ? 0 : numericValue };
             }
-            return line;
         }));
     };
     
     const addLine = () => {
-        setLines([...lines, { id: nextId++, akun_id: '', debit: 0, credit: 0 }]);
+        setLines([...lines, { id: nextId++, akun_id: '', debit: 0, kredit: 0 }]);
     };
 
     const removeLine = (id: number) => {
         setLines(lines.filter(line => line.id !== id));
     };
 
-    const { totalDebit, totalCredit, isBalanced } = useMemo(() => {
-        const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-        const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+    const { totalDebit, totalKredit, isBalanced } = useMemo(() => {
+        const totalDebit = lines.reduce((sum, line) => sum + (line.debit || 0), 0);
+        const totalKredit = lines.reduce((sum, line) => sum + (line.kredit || 0), 0);
         return {
             totalDebit,
-            totalCredit,
-            isBalanced: totalDebit === totalCredit && totalDebit > 0,
+            totalKredit,
+            isBalanced: totalDebit === totalKredit && totalDebit > 0,
         };
     }, [lines]);
 
@@ -54,33 +57,33 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
             alert('Jurnal tidak seimbang! Total Debit harus sama dengan Total Kredit.');
             return;
         }
-        if (!deskripsi) {
+        if (!deskripsi.trim()) {
             alert('Deskripsi jurnal tidak boleh kosong.');
             return;
         }
         
         const finalLines: JurnalEntryLine[] = lines
-            .filter(line => line.akun_id && (line.debit > 0 || line.credit > 0))
+            .filter(line => line.akun_id && (line.debit > 0 || line.kredit > 0))
             .map(line => {
                 const account = accounts.find(a => a.id === line.akun_id);
                 return {
-                    akun_id: line.akun_id,
+                    akun_id: line.akun_id || '',
                     akun_kode: account?.kode || 'N/A',
                     akun_nama: account?.nama || 'N/A',
-                    debit: line.debit,
-                    kredit: line.kredit,
+                    debit: line.debit || 0,
+                    kredit: line.kredit || 0,
                 };
             });
 
         if (finalLines.length < 2) {
-            alert("Jurnal harus memiliki setidaknya dua baris (satu debit dan satu kredit).");
+            alert("Jurnal harus memiliki setidaknya dua baris (satu debit dan satu kredit) yang valid.");
             return;
         }
 
         onSave(deskripsi, finalLines);
     };
 
-    const availableAccounts = accounts.filter(a => a.parent_kode); // Hanya akun anak yang bisa dipilih
+    const availableAccounts = accounts.filter(a => a.parent_kode);
 
     return (
         <div className="space-y-4 text-sm">
@@ -112,7 +115,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
                                     <input type="number" value={line.debit || ''} onChange={e => handleLineChange(line.id, 'debit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm text-sm"/>
                                 </td>
                                  <td className="px-2 py-1">
-                                    <input type="number" value={line.credit || ''} onChange={e => handleLineChange(line.id, 'credit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm text-sm"/>
+                                    <input type="number" name="kredit" value={line.kredit || ''} onChange={e => handleLineChange(line.id, 'kredit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm text-sm"/>
                                 </td>
                                 <td className="px-2 py-1 text-center">
                                     <button onClick={() => removeLine(line.id)} className="text-red-500 hover:text-red-700 disabled:text-gray-400" disabled={lines.length <= 2}>
@@ -136,11 +139,11 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
                 </div>
                  <div className="text-right">
                     <p className="text-xs text-gray-500">Total Kredit</p>
-                    <p className="font-semibold text-gray-800">{formatCurrency(totalCredit)}</p>
+                    <p className="font-semibold text-gray-800">{formatCurrency(totalKredit)}</p>
                 </div>
                  <div className={`text-right p-2 rounded ${isBalanced ? 'bg-green-100' : 'bg-red-100'}`}>
                     <p className="text-xs text-gray-500">Selisih</p>
-                    <p className={`font-semibold ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totalDebit - totalCredit)}</p>
+                    <p className={`font-semibold ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totalDebit - totalKredit)}</p>
                 </div>
             </div>
 
@@ -157,3 +160,4 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
 };
 
 export default ManualJournalForm;
+
