@@ -6,7 +6,7 @@ interface JournalLine {
   id: number;
   accountId: string;
   debit: number;
-  credit: number;
+  kredit: number;
 }
 
 interface ManualJournalProps {
@@ -24,8 +24,8 @@ const ManualJournal: React.FC<ManualJournalProps> = ({ onSave, onClose }) => {
     const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
     const [memo, setMemo] = useState('');
     const [lines, setLines] = useState<JournalLine[]>([
-        { id: 1, accountId: '', debit: 0, credit: 0 },
-        { id: 2, accountId: '', debit: 0, credit: 0 },
+        { id: 1, accountId: '', debit: 0, kredit: 0 },
+        { id: 2, accountId: '', debit: 0, kredit: 0 },
     ]);
 
     const handleLineChange = (id: number, field: keyof JournalLine, value: string | number) => {
@@ -39,20 +39,20 @@ const ManualJournal: React.FC<ManualJournalProps> = ({ onSave, onClose }) => {
     };
     
     const addLine = () => {
-        setLines([...lines, { id: nextId++, accountId: '', debit: 0, credit: 0 }]);
+        setLines([...lines, { id: nextId++, accountId: '', debit: 0, kredit: 0 }]);
     };
 
     const removeLine = (id: number) => {
         setLines(lines.filter(line => line.id !== id));
     };
 
-    const { totalDebit, totalCredit, isBalanced } = useMemo(() => {
+    const { totalDebit, totalKredit, isBalanced } = useMemo(() => {
         const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-        const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+        const totalKredit = lines.reduce((sum, line) => sum + line.kredit, 0);
         return {
             totalDebit,
-            totalCredit,
-            isBalanced: totalDebit === totalCredit && totalDebit > 0,
+            totalKredit,
+            isBalanced: totalDebit === totalKredit && totalDebit > 0,
         };
     }, [lines]);
 
@@ -103,7 +103,7 @@ const ManualJournal: React.FC<ManualJournalProps> = ({ onSave, onClose }) => {
                                     <input type="number" value={line.debit || ''} onChange={e => handleLineChange(line.id, 'debit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary text-sm"/>
                                 </td>
                                  <td className="px-2 py-1">
-                                    <input type="number" value={line.credit || ''} onChange={e => handleLineChange(line.id, 'credit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary text-sm"/>
+                                    <input type="number" value={line.kredit || ''} onChange={e => handleLineChange(line.id, 'kredit', e.target.value)} className="w-full text-right border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary text-sm"/>
                                 </td>
                                 <td className="px-2 py-1 text-center">
                                     <button onClick={() => removeLine(line.id)} className="text-red-500 hover:text-red-700 disabled:text-gray-400" disabled={lines.length <= 2}>
@@ -128,11 +128,11 @@ const ManualJournal: React.FC<ManualJournalProps> = ({ onSave, onClose }) => {
                 </div>
                  <div className="text-right">
                     <p className="text-xs text-gray-500">Total Kredit</p>
-                    <p className="font-semibold text-gray-800">{formatCurrency(totalCredit)}</p>
+                    <p className="font-semibold text-gray-800">{formatCurrency(totalKredit)}</p>
                 </div>
                  <div className="text-right">
                     <p className="text-xs text-gray-500">Selisih</p>
-                    <p className={`font-semibold ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totalDebit - totalCredit)}</p>
+                    <p className={`font-semibold ${isBalanced ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(totalDebit - totalKredit)}</p>
                 </div>
             </div>
 
