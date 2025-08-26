@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
+import { useSettings } from './SettingsContext'; // Impor hook settings
 
 interface MurabahahFormProps {
   onSave: (kontrak: Omit<KontrakMurabahah, 'id'>) => void;
@@ -14,6 +15,7 @@ const formatCurrency = (value: number) => {
 };
 
 const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaList, initialData }) => {
+  const { settings } = useSettings(); // Ambil data pengaturan
   const [formData, setFormData] = useState({
     anggota_id: initialData?.anggota_id || '',
     nama_barang: initialData?.nama_barang || '',
@@ -24,10 +26,21 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     status: initialData?.status || StatusKontrak.REVIEW,
   });
   
-  // State baru untuk menangani input pencarian anggota
   const [memberName, setMemberName] = useState('');
 
-  // Inisialisasi nama anggota jika sedang mengedit data
+  // Tentukan maksimal tenor berdasarkan lama keanggotaan
+  const maxTenor = useMemo(() => {
+    if (!formData.anggota_id) return 12; // Default jika belum ada anggota dipilih
+    const anggota = anggotaList.find(a => a.id === formData.anggota_id);
+    if (!anggota) return 12;
+
+    const tglGabung = new Date(anggota.tgl_gabung);
+    const today = new Date();
+    const yearsDiff = today.getFullYear() - tglGabung.getFullYear();
+    
+    return yearsDiff >= 2 ? 24 : 12;
+  }, [formData.anggota_id, anggotaList]);
+
   useEffect(() => {
     if (initialData && initialData.anggota_id) {
       const nama = anggotaList.find(a => a.id === initialData.anggota_id)?.nama || '';
@@ -35,23 +48,23 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     }
   }, [initialData, anggotaList]);
 
-
   const calculatedValues = useMemo(() => {
-    const { harga_pokok, tenor } = formData;
+    const { harga_pokok, tenor, uang_muka } = formData;
     if (harga_pokok <= 0) return { margin: 0, harga_jual: 0, cicilan_per_bulan: 0 };
 
+    // Gunakan margin dari settings
     let marginPersen;
-    if (tenor <= 6) marginPersen = 0.10;
-    else if (tenor <= 12) marginPersen = 0.15;
-    else if (tenor <= 18) marginPersen = 0.20;
-    else marginPersen = 0.30;
+    if (tenor <= 6) marginPersen = settings.margin_tenor_6;
+    else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
+    else if (tenor <= 18) marginPersen = settings.margin_tenor_18;
+    else marginPersen = settings.margin_tenor_24;
 
-    const margin = harga_pokok * marginPersen;
+    const margin = harga_pokok * (marginPersen / 100);
     const harga_jual = harga_pokok + margin;
-    const cicilan_per_bulan = harga_jual / tenor;
+    const cicilan_per_bulan = (harga_jual - uang_muka) / tenor;
 
     return { margin, harga_jual, cicilan_per_bulan };
-  }, [formData.harga_pokok, formData.tenor]);
+  }, [formData.harga_pokok, formData.tenor, formData.uang_muka, settings]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -59,7 +72,6 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     setFormData(prev => ({ ...prev, [name]: isNumber ? Number(value) : value }));
   };
   
-  // Handler baru untuk input pencarian anggota
   const handleMemberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedName = e.target.value;
     setMemberName(selectedName);
@@ -77,7 +89,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
         alert("Mohon pilih anggota dan lengkapi semua data yang diperlukan.");
         return;
     }
-    onSave({ ...formData, ...calculatedValues });
+    onSave({ ...formData, ...calculatedValues, cicilan_terbayar: initialData?.cicilan_terbayar || 0 });
   };
 
   return (
@@ -85,16 +97,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Anggota</label>
-          {/* --- PERUBAHAN DROPDOWN MENJADI INPUT DENGAN PENCARIAN --- */}
-          <input
-            type="text"
-            list="anggota-list"
-            value={memberName}
-            onChange={handleMemberChange}
-            placeholder="Ketik untuk mencari anggota..."
-            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"
-            required
-          />
+          <input type="text" list="anggota-list" value={memberName} onChange={handleMemberChange} placeholder="Ketik untuk mencari anggota..." className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
           <datalist id="anggota-list">
             {anggotaList.map(a => <option key={a.id} value={a.nama} />)}
           </datalist>
@@ -114,8 +117,9 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
         <div>
           <label className="block text-sm font-medium text-gray-700">Tenor (Bulan)</label>
           <select name="tenor" value={formData.tenor} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-             {Array.from({ length: 24 }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
+             {Array.from({ length: maxTenor }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
           </select>
+          <p className="text-xs text-gray-500 mt-1">Maksimal tenor untuk anggota ini: {maxTenor} bulan.</p>
         </div>
          <div>
           <label className="block text-sm font-medium text-gray-700">Status Kontrak</label>
@@ -133,16 +137,11 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
       </div>
 
       <div className="flex justify-end space-x-3 pt-4 border-t">
-        <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
-          Batal
-        </button>
-        <button type="submit" className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-amber-500">
-          Simpan Kontrak
-        </button>
+        <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">Batal</button>
+        <button type="submit" className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-amber-500">Simpan Kontrak</button>
       </div>
     </form>
   );
 };
 
 export default MurabahahForm;
-
