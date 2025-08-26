@@ -24,21 +24,25 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     tenor: initialData?.tenor || 12,
     tanggal_akad: initialData?.tanggal_akad || new Date().toISOString().split('T')[0],
     status: initialData?.status || StatusKontrak.REVIEW,
+    cicilan_terbayar: initialData?.cicilan_terbayar || 0,
   });
   
   const [memberName, setMemberName] = useState('');
 
-  // Tentukan maksimal tenor berdasarkan lama keanggotaan
+  // Tentukan maksimal tenor berdasarkan lama keanggotaan (aturan 3 tahun)
   const maxTenor = useMemo(() => {
     if (!formData.anggota_id) return 12; // Default jika belum ada anggota dipilih
     const anggota = anggotaList.find(a => a.id === formData.anggota_id);
-    if (!anggota) return 12;
+    if (!anggota || !anggota.tgl_gabung) return 12;
 
     const tglGabung = new Date(anggota.tgl_gabung);
     const today = new Date();
-    const yearsDiff = today.getFullYear() - tglGabung.getFullYear();
     
-    return yearsDiff >= 2 ? 24 : 12;
+    // Hitung selisih dalam milidetik, lalu konversi ke tahun
+    const diffTime = Math.abs(today.getTime() - tglGabung.getTime());
+    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    
+    return diffYears >= 3 ? 24 : 12;
   }, [formData.anggota_id, anggotaList]);
 
   useEffect(() => {
@@ -47,6 +51,13 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
       setMemberName(nama);
     }
   }, [initialData, anggotaList]);
+
+  // Jika maxTenor berubah dan tenor saat ini melebihi batas, sesuaikan
+  useEffect(() => {
+      if(formData.tenor > maxTenor) {
+          setFormData(prev => ({...prev, tenor: maxTenor}));
+      }
+  }, [maxTenor, formData.tenor]);
 
   const calculatedValues = useMemo(() => {
     const { harga_pokok, tenor, uang_muka } = formData;
@@ -68,7 +79,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    const isNumber = ['harga_pokok', 'uang_muka', 'tenor'].includes(name);
+    const isNumber = ['harga_pokok', 'uang_muka', 'tenor', 'cicilan_terbayar'].includes(name);
     setFormData(prev => ({ ...prev, [name]: isNumber ? Number(value) : value }));
   };
   
@@ -89,7 +100,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
         alert("Mohon pilih anggota dan lengkapi semua data yang diperlukan.");
         return;
     }
-    onSave({ ...formData, ...calculatedValues, cicilan_terbayar: initialData?.cicilan_terbayar || 0 });
+    onSave({ ...formData, ...calculatedValues });
   };
 
   return (
@@ -127,6 +138,12 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
             {Object.values(StatusKontrak).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
+        {initialData && (
+             <div>
+                <label className="block text-sm font-medium text-gray-700">Cicilan Terbayar</label>
+                <input type="number" name="cicilan_terbayar" value={formData.cicilan_terbayar || ''} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" />
+            </div>
+        )}
       </div>
       
       <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2">
@@ -145,3 +162,4 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
 };
 
 export default MurabahahForm;
+
