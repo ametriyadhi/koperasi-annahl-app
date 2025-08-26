@@ -2,14 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { JurnalEntry } from '../types';
-import { TrashIcon } from './icons'; // Impor ikon hapus
+import { TrashIcon } from './icons'; // Pastikan ikon hapus diimpor
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 };
 
+// Prop 'onDelete' ditambahkan kembali
 interface JurnalUmumProps {
-    onDelete: (jurnalId: string) => void; // Prop baru untuk menangani penghapusan
+    onDelete: (jurnalId: string) => void;
 }
 
 const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete }) => {
@@ -39,7 +40,7 @@ const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete }) => {
                             <p className="font-semibold">{entry.deskripsi}</p>
                             <p className="text-sm text-gray-500">{new Date(entry.tanggal).toLocaleDateString('id-ID')}</p>
                         </div>
-                        {/* --- TOMBOL HAPUS BARU --- */}
+                        {/* Tombol Hapus ditambahkan kembali */}
                         <button 
                             onClick={() => onDelete(entry.id)} 
                             className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100"
@@ -67,5 +68,6 @@ const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete }) => {
 };
 
 export default JurnalUmum;
+
 
 
