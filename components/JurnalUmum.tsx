@@ -2,12 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { JurnalEntry } from '../types';
+import { TrashIcon } from './icons'; // Impor ikon hapus
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 };
 
-const JurnalUmum: React.FC = () => {
+interface JurnalUmumProps {
+    onDelete: (jurnalId: string) => void; // Prop baru untuk menangani penghapusan
+}
+
+const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete }) => {
     const [jurnalEntries, setJurnalEntries] = useState<JurnalEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -29,9 +34,19 @@ const JurnalUmum: React.FC = () => {
         <div className="space-y-4">
             {jurnalEntries.map(entry => (
                 <div key={entry.id} className="bg-white p-4 rounded-lg shadow-sm border">
-                    <div className="flex justify-between items-center border-b pb-2 mb-2">
-                        <p className="font-semibold">{entry.deskripsi}</p>
-                        <p className="text-sm text-gray-500">{new Date(entry.tanggal).toLocaleDateString('id-ID')}</p>
+                    <div className="flex justify-between items-start border-b pb-2 mb-2">
+                        <div>
+                            <p className="font-semibold">{entry.deskripsi}</p>
+                            <p className="text-sm text-gray-500">{new Date(entry.tanggal).toLocaleDateString('id-ID')}</p>
+                        </div>
+                        {/* --- TOMBOL HAPUS BARU --- */}
+                        <button 
+                            onClick={() => onDelete(entry.id)} 
+                            className="text-red-500 hover:text-red-700 p-1 rounded-full hover:bg-red-100"
+                            title="Hapus Jurnal Ini"
+                        >
+                            <TrashIcon className="w-5 h-5" />
+                        </button>
                     </div>
                     <table className="w-full text-sm">
                         <tbody>
@@ -52,4 +67,5 @@ const JurnalUmum: React.FC = () => {
 };
 
 export default JurnalUmum;
+
 
