@@ -1,5 +1,5 @@
-imimport React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
@@ -18,28 +18,39 @@ const Dashboard: React.FC = () => {
 
     // useEffect untuk mengambil data anggota dan kontrak secara real-time dari Firestore.
     useEffect(() => {
+        setLoading(true);
         // Listener untuk koleksi 'anggota'
         const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
             const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Anggota[];
             setAnggotaList(members);
+            // Cek jika kedua listener sudah selesai fetch data awal
+            if (kontrakList.length > 0 || snapshot.empty) {
+                setLoading(false);
+            }
         });
 
         // Listener untuk koleksi 'kontrak_murabahah'
         const unsubKontrak = onSnapshot(collection(db, "kontrak_murabahah"), (snapshot) => {
             const contracts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as KontrakMurabahah[];
             setKontrakList(contracts);
+            // Cek jika kedua listener sudah selesai fetch data awal
+            if (anggotaList.length > 0 || snapshot.empty) {
+                setLoading(false);
+            }
+        });
+        
+        // Handle kasus jika salah satu atau kedua koleksi kosong
+        Promise.all([getDocs(collection(db, "anggota")), getDocs(collection(db, "kontrak_murabahah"))]).then(() => {
+            setLoading(false);
         });
 
-        // Set loading menjadi false setelah kedua listener aktif (meskipun data mungkin masih masuk).
-        // Dalam aplikasi nyata, Anda mungkin ingin state loading yang lebih canggih.
-        setLoading(false);
 
         // Fungsi cleanup untuk berhenti mendengarkan perubahan saat komponen di-unmount.
         return () => {
             unsubAnggota();
             unsubKontrak();
         };
-    }, []);
+    }, []); // Dependency array kosong agar hanya berjalan sekali saat mount
 
     // useMemo untuk menghitung metrik utama. Kalkulasi ini hanya akan berjalan kembali
     // jika data anggotaList atau kontrakList berubah.
@@ -56,7 +67,7 @@ const Dashboard: React.FC = () => {
         const outstandingMurabahah = kontrakList
             .filter(k => k.status === StatusKontrak.BERJALAN)
             .reduce((acc, k) => {
-                const sisaHutang = (k.harga_jual - k.uang_muka) - (k.cicilan_terbayar * k.cicilan_per_bulan);
+                const sisaHutang = (k.harga_jual - k.uang_muka) - ((k.cicilan_terbayar || 0) * (k.cicilan_per_bulan || 0));
                 return acc + Math.max(0, sisaHutang); // Pastikan tidak negatif
             }, 0);
 
@@ -121,22 +132,28 @@ const Dashboard: React.FC = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {recentKontrak.map(k => {
-                                const anggota = anggotaList.find(a => a.id === k.anggota_id);
-                                return (
-                                <tr key={k.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{anggota?.nama || '...'}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{k.nama_barang}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 font-medium">{formatCurrency(k.harga_jual)}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                        <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                                            k.status === StatusKontrak.BERJALAN ? 'bg-blue-100 text-blue-800' :
-                                            k.status === StatusKontrak.LUNAS ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                        }`}>{k.status}</span>
-                                    </td>
-                                </tr>
-                                );
-                            })}
+                            {loading ? (
+                                <tr><td colSpan={4} className="text-center p-4">Memuat...</td></tr>
+                            ) : recentKontrak.length === 0 ? (
+                                <tr><td colSpan={4} className="text-center p-4 text-gray-500">Belum ada data pembiayaan.</td></tr>
+                            ) : (
+                                recentKontrak.map(k => {
+                                    const anggota = anggotaList.find(a => a.id === k.anggota_id);
+                                    return (
+                                    <tr key={k.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{anggota?.nama || '...'}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">{k.nama_barang}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800 font-medium">{formatCurrency(k.harga_jual)}</td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                k.status === StatusKontrak.BERJALAN ? 'bg-blue-100 text-blue-800' :
+                                                k.status === StatusKontrak.LUNAS ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                            }`}>{k.status}</span>
+                                        </td>
+                                    </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -144,17 +161,23 @@ const Dashboard: React.FC = () => {
             {/* Bagian Aktivitas diganti menjadi Anggota Baru (Dinamis) */}
             <Card title="Anggota Baru Bergabung">
                  <ul className="divide-y divide-gray-200">
-                     {recentAnggota.map(a => (
-                         <li key={a.id} className="py-3 flex justify-between items-center">
-                             <div>
-                                 <p className="text-sm font-medium text-gray-900">{a.nama}</p>
-                                 <p className="text-sm text-gray-500">Unit: {a.unit}</p>
-                             </div>
-                             <p className="text-sm font-medium text-gray-600">
-                                {new Date(a.tgl_gabung).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
-                             </p>
-                         </li>
-                     ))}
+                     {loading ? (
+                        <li className="text-center p-4">Memuat...</li>
+                     ) : recentAnggota.length === 0 ? (
+                        <li className="text-center p-4 text-gray-500">Belum ada anggota baru.</li>
+                     ) : (
+                        recentAnggota.map(a => (
+                            <li key={a.id} className="py-3 flex justify-between items-center">
+                                <div>
+                                    <p className="text-sm font-medium text-gray-900">{a.nama}</p>
+                                    <p className="text-sm text-gray-500">Unit: {a.unit}</p>
+                                </div>
+                                <p className="text-sm font-medium text-gray-600">
+                                   {new Date(a.tgl_gabung).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                </p>
+                            </li>
+                        ))
+                     )}
                  </ul>
             </Card>
         </div>
@@ -163,6 +186,7 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+
 
 
 
