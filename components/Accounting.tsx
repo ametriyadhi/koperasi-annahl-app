@@ -227,6 +227,3 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
-
-
-export default Accounting;
