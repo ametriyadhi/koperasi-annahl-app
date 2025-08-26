@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Akun, JurnalEntryLine } from '../types';
@@ -61,17 +61,17 @@ const Accounting: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
-    const handleOpenAccountModal = useCallback((akun: Akun | null = null) => {
+    const handleOpenAccountModal = (akun: Akun | null = null) => {
         setEditingAccount(akun);
         setIsAccountModalOpen(true);
-    }, []);
+    };
 
-    const handleCloseAccountModal = useCallback(() => {
+    const handleCloseAccountModal = () => {
         setIsAccountModalOpen(false);
         setEditingAccount(null);
-    }, []);
+    };
 
-    const handleSaveAccount = useCallback(async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
+    const handleSaveAccount = async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
         try {
             if (editingAccount) {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
@@ -84,9 +84,9 @@ const Accounting: React.FC = () => {
             console.error("Error saving account: ", error);
             alert("Gagal menyimpan akun.");
         }
-    }, [editingAccount, handleCloseAccountModal]);
+    };
 
-    const handleDeleteAccount = useCallback(async (id: string) => {
+    const handleDeleteAccount = async (id: string) => {
         if (confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
             try {
                 await deleteDoc(doc(db, "chart_of_accounts", id));
@@ -95,11 +95,17 @@ const Accounting: React.FC = () => {
                 alert("Gagal menghapus akun.");
             }
         }
-    }, []);
+    };
 
-    const handleSaveManualJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[]) => {
+    // --- FUNGSI YANG DIPERBAIKI ---
+    const handleSaveManualJournal = async (deskripsi: string, lines: JurnalEntryLine[]) => {
         try {
             await runTransaction(db, async (transaction) => {
+                // --- TAHAP 1: BACA SEMUA DATA TERLEBIH DAHULU ---
+                const accountRefs = lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
+                const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
+
+                // --- TAHAP 2: LAKUKAN SEMUA PENULISAN DATA ---
                 const jurnalRef = doc(collection(db, "jurnal_umum"));
                 transaction.set(jurnalRef, {
                     tanggal: new Date().toISOString(),
@@ -107,14 +113,17 @@ const Accounting: React.FC = () => {
                     lines,
                 });
 
-                for (const line of lines) {
-                    const accountRef = doc(db, "chart_of_accounts", line.akun_id);
-                    const accDoc = await transaction.get(accountRef);
-                    if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const accDoc = accountDocs[i];
+                    
+                    if (!accDoc.exists()) {
+                        throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
+                    }
                     
                     const currentSaldo = accDoc.data().saldo || 0;
                     const newSaldo = currentSaldo + line.debit - line.kredit;
-                    transaction.update(accountRef, { saldo: newSaldo });
+                    transaction.update(accountRefs[i], { saldo: newSaldo });
                 }
             });
             alert("Jurnal manual berhasil disimpan!");
@@ -123,25 +132,16 @@ const Accounting: React.FC = () => {
             console.error("Gagal menyimpan jurnal manual: ", error);
             alert(`Terjadi kesalahan: ${error}`);
         }
-    }, []);
+    };
 
-    const renderedAccountTree = useMemo(() => {
-        const renderAccountsRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
-            return allAccounts
-                .filter(a => a.parent_kode === parentId)
-                .flatMap(akun => [
-                    <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
-                    ...renderAccountsRecursively(akun.kode, allAccounts, level + 1)
-                ]);
-        };
-
-        const topLevelAccounts = accounts.filter(a => !a.parent_kode);
-        return topLevelAccounts.flatMap(parent => [
-            <AccountRow key={parent.id} akun={parent} level={0} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
-            ...renderAccountsRecursively(parent.kode, accounts, 1)
-        ]);
-    }, [accounts, handleOpenAccountModal, handleDeleteAccount]);
-
+    const renderAccounts = (parentId: string | undefined = undefined, level = 0) => {
+        return accounts
+            .filter(a => a.parent_kode === parentId)
+            .flatMap(akun => [
+                <AccountRow key={akun.id} akun={akun} level={level} onEdit={handleOpenAccountModal} onDelete={handleDeleteAccount} />,
+                ...renderAccounts(akun.kode, level + 1)
+            ]);
+    };
 
     return (
         <>
@@ -184,7 +184,7 @@ const Accounting: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white">
-                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderedAccountTree}
+                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderAccounts()}
                             </tbody>
                         </table>
                     </div>
@@ -225,5 +225,8 @@ const Accounting: React.FC = () => {
         </>
     );
 };
+
+export default Accounting;
+
 
 export default Accounting;
