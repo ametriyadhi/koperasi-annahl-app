@@ -39,7 +39,7 @@ const JurnalUmum: React.FC = () => {
                                 <tr key={index}>
                                     <td className={`py-1 ${line.kredit > 0 ? 'pl-8' : ''}`}>{line.akun_kode} - {line.akun_nama}</td>
                                     <td className="py-1 text-right w-1/4">{line.debit > 0 ? formatCurrency(line.debit) : ''}</td>
-                                    <td className="py-1 text-right w-1/4">{line.credit > 0 ? formatCurrency(line.credit) : ''}</td>
+                                    <td className="py-1 text-right w-1/4">{line.kredit > 0 ? formatCurrency(line.kredit) : ''}</td>
                                 </tr>
                             ))}
                         </tbody>
@@ -52,3 +52,4 @@ const JurnalUmum: React.FC = () => {
 };
 
 export default JurnalUmum;
+
