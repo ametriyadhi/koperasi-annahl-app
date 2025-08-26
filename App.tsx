@@ -1,22 +1,23 @@
 import React, { useState } from 'react';
-import { AuthProvider, useAuth } from './components/auth/AuthContext';
-import { SettingsProvider } from './components/settings/SettingsContext';
+// Jalur impor dikembalikan ke struktur asli
+import { AuthProvider, useAuth } from './components/AuthContext';
+import { SettingsProvider } from './components/SettingsContext';
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
-import Login from './components/auth/Login';
-import MemberPortal from './components/members/MemberPortal/MemberPortal';
-import Sidebar from './components/core/Sidebar';
-import Dashboard from './components/core/Dashboard';
-import Members from './components/members/Members';
-import Savings from './components/savings/Savings';
-import Murabahah from './components/murabahah/Murabahah';
-import MurabahahSimulator from './components/murabahah/Simulator';
+import Login from './components/Login';
+import MemberPortal from './components/MemberPortal';
+import Sidebar from './components/Sidebar';
+import Dashboard from './components/Dashboard';
+import Members from './components/Members';
+import Savings from './components/Savings';
+import Murabahah from './components/Murabahah';
+import MurabahahSimulator from './components/Simulator';
 import MonthlyProcess from './components/MonthlyProcess';
-import Accounting from './components/accounting/Accounting';
-import Reports from './components/reports/Reports';
-import Settings from './components/settings/Settings';
-import { MenuIcon } from './components/core/icons';
+import Accounting from './components/Accounting';
+import Reports from './components/Reports';
+import Settings from './components/Settings';
+import { MenuIcon } from './components/icons';
 
 type ViewType = 'Dashboard' | 'Anggota' | 'Simpanan' | 'Murabahah' | 'Simulator' | 'Proses Bulanan' | 'Akuntansi' | 'Laporan' | 'Pengaturan';
 
@@ -26,7 +27,7 @@ const AdminDashboard: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
-  const handleLogout = async () => { if (confirm("Yakin ingin keluar?")) await signOut(auth); };
+  const handleLogout = async () => { if (window.confirm("Yakin ingin keluar?")) await signOut(auth); };
   
   const renderView = () => {
     switch (activeView) {
@@ -62,16 +63,18 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-// AppGate sekarang jauh lebih sederhana
+// Logika AppGate yang sudah diperbaiki dari sebelumnya
 const AppGate: React.FC = () => {
-    const { currentUser, userProfile } = useAuth();
+    const { currentUser, userProfile, loading } = useAuth();
 
-    // Jika tidak ada user, tampilkan Login
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen">Memuat...</div>;
+    }
+
     if (!currentUser) {
         return <Login />;
     }
 
-    // Arahkan berdasarkan peran userProfile
     if (userProfile?.role === 'anggota') {
         return <MemberPortal />;
     }
@@ -80,7 +83,6 @@ const AppGate: React.FC = () => {
         return <AdminDashboard />;
     }
     
-    // Tampilan fallback jika user ada tapi tidak punya peran
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center">
             <h2 className="text-xl font-semibold">Akses Ditolak</h2>
@@ -104,5 +106,6 @@ const App: React.FC = () => {
 };
 
 export default App;
+
 
 
