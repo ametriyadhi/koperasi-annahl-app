@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
-import { useSettings } from './SettingsContext'; // Impor hook settings
+import { useSettings } from './SettingsContext';
 
 interface MurabahahFormProps {
   onSave: (kontrak: Omit<KontrakMurabahah, 'id'>) => void;
@@ -15,11 +15,13 @@ const formatCurrency = (value: number) => {
 };
 
 const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaList, initialData }) => {
-  const { settings } = useSettings(); // Ambil data pengaturan
+  const { settings } = useSettings();
   const [formData, setFormData] = useState({
     anggota_id: initialData?.anggota_id || '',
     nama_barang: initialData?.nama_barang || '',
     harga_pokok: initialData?.harga_pokok || 0,
+    // --- PERUBAHAN: Margin sekarang menjadi bagian dari state form ---
+    margin: initialData?.margin || 0,
     uang_muka: initialData?.uang_muka || 0,
     tenor: initialData?.tenor || 12,
     tanggal_akad: initialData?.tanggal_akad || new Date().toISOString().split('T')[0],
@@ -29,22 +31,26 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
   
   const [memberName, setMemberName] = useState('');
 
-  // Tentukan maksimal tenor berdasarkan lama keanggotaan (aturan 3 tahun)
-  const maxTenor = useMemo(() => {
-    if (!formData.anggota_id) return 12; // Default jika belum ada anggota dipilih
-    const anggota = anggotaList.find(a => a.id === formData.anggota_id);
-    if (!anggota || !anggota.tgl_gabung) return 12;
+  // Efek untuk menghitung margin awal secara otomatis saat harga pokok atau tenor berubah
+  useEffect(() => {
+    // Hanya hitung ulang jika BUKAN mode edit, agar tidak menimpa margin manual
+    if (!initialData) {
+        const { harga_pokok, tenor } = formData;
+        if (harga_pokok > 0) {
+            let marginPersen;
+            if (tenor <= 6) marginPersen = settings.margin_tenor_6;
+            else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
+            else if (tenor <= 18) marginPersen = settings.margin_tenor_18;
+            else marginPersen = settings.margin_tenor_24;
+            
+            const calculatedMargin = harga_pokok * (marginPersen / 100);
+            setFormData(prev => ({ ...prev, margin: calculatedMargin }));
+        }
+    }
+  }, [formData.harga_pokok, formData.tenor, settings, initialData]);
 
-    const tglGabung = new Date(anggota.tgl_gabung);
-    const today = new Date();
-    
-    // Hitung selisih dalam milidetik, lalu konversi ke tahun
-    const diffTime = Math.abs(today.getTime() - tglGabung.getTime());
-    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
-    
-    return diffYears >= 3 ? 24 : 12;
-  }, [formData.anggota_id, anggotaList]);
 
+  // Efek untuk mengisi nama anggota saat mode edit
   useEffect(() => {
     if (initialData && initialData.anggota_id) {
       const nama = anggotaList.find(a => a.id === initialData.anggota_id)?.nama || '';
@@ -52,34 +58,20 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     }
   }, [initialData, anggotaList]);
 
-  // Jika maxTenor berubah dan tenor saat ini melebihi batas, sesuaikan
-  useEffect(() => {
-      if(formData.tenor > maxTenor) {
-          setFormData(prev => ({...prev, tenor: maxTenor}));
-      }
-  }, [maxTenor, formData.tenor]);
-
+  // Kalkulasi harga jual dan cicilan sekarang didasarkan pada margin di form
   const calculatedValues = useMemo(() => {
-    const { harga_pokok, tenor, uang_muka } = formData;
-    if (harga_pokok <= 0) return { margin: 0, harga_jual: 0, cicilan_per_bulan: 0 };
+    const { harga_pokok, margin, tenor, uang_muka } = formData;
+    if (harga_pokok <= 0) return { harga_jual: 0, cicilan_per_bulan: 0 };
 
-    // Gunakan margin dari settings
-    let marginPersen;
-    if (tenor <= 6) marginPersen = settings.margin_tenor_6;
-    else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
-    else if (tenor <= 18) marginPersen = settings.margin_tenor_18;
-    else marginPersen = settings.margin_tenor_24;
-
-    const margin = harga_pokok * (marginPersen / 100);
     const harga_jual = harga_pokok + margin;
-    const cicilan_per_bulan = (harga_jual - uang_muka) / tenor;
+    const cicilan_per_bulan = tenor > 0 ? (harga_jual - uang_muka) / tenor : 0;
 
-    return { margin, harga_jual, cicilan_per_bulan };
-  }, [formData.harga_pokok, formData.tenor, formData.uang_muka, settings]);
+    return { harga_jual, cicilan_per_bulan };
+  }, [formData.harga_pokok, formData.margin, formData.tenor, formData.uang_muka]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    const isNumber = ['harga_pokok', 'uang_muka', 'tenor', 'cicilan_terbayar'].includes(name);
+    const isNumber = ['harga_pokok', 'margin', 'uang_muka', 'tenor', 'cicilan_terbayar'].includes(name);
     setFormData(prev => ({ ...prev, [name]: isNumber ? Number(value) : value }));
   };
   
@@ -87,11 +79,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
     const selectedName = e.target.value;
     setMemberName(selectedName);
     const selectedAnggota = anggotaList.find(a => a.nama === selectedName);
-    if (selectedAnggota) {
-        setFormData(prev => ({ ...prev, anggota_id: selectedAnggota.id }));
-    } else {
-        setFormData(prev => ({ ...prev, anggota_id: '' }));
-    }
+    setFormData(prev => ({ ...prev, anggota_id: selectedAnggota?.id || '' }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -121,6 +109,11 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
           <label className="block text-sm font-medium text-gray-700">Harga Pokok (Rp)</label>
           <input type="number" name="harga_pokok" value={formData.harga_pokok || ''} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
         </div>
+        {/* --- PERUBAHAN: Margin sekarang bisa diedit --- */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Margin (Rp)</label>
+          <input type="number" name="margin" value={formData.margin || ''} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700">Uang Muka (Rp)</label>
           <input type="number" name="uang_muka" value={formData.uang_muka || ''} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" />
@@ -128,9 +121,8 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
         <div>
           <label className="block text-sm font-medium text-gray-700">Tenor (Bulan)</label>
           <select name="tenor" value={formData.tenor} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-             {Array.from({ length: maxTenor }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
+             {Array.from({ length: 36 }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
           </select>
-          <p className="text-xs text-gray-500 mt-1">Maksimal tenor untuk anggota ini: {maxTenor} bulan.</p>
         </div>
          <div>
           <label className="block text-sm font-medium text-gray-700">Status Kontrak</label>
@@ -148,7 +140,6 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
       
       <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2">
         <h4 className="font-semibold text-center">Rincian Perhitungan Otomatis</h4>
-        <div className="flex justify-between text-sm"><span className="text-gray-600">Margin</span><span>{formatCurrency(calculatedValues.margin)}</span></div>
         <div className="flex justify-between text-sm font-bold"><span className="text-gray-600">Harga Jual</span><span>{formatCurrency(calculatedValues.harga_jual)}</span></div>
         <div className="flex justify-between text-lg font-bold text-primary"><span className="text-gray-800">Cicilan / Bulan</span><span>{formatCurrency(calculatedValues.cicilan_per_bulan)}</span></div>
       </div>
@@ -162,4 +153,5 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
 };
 
 export default MurabahahForm;
+
 
