@@ -9,8 +9,9 @@ import Card from './shared/Card';
 // PENTING: Pastikan semua akun dengan kode di bawah ini SUDAH ADA di menu Akuntansi -> Bagan Akun Anda.
 // Jika belum ada, proses ini akan gagal.
 const KODE_AKUN_AUTODEBET = {
-    PIUTANG_SEKOLAH: '1-1300',   // ASET: Piutang Gaji/Potongan dari Sekolah. Buat akun ini jika belum ada.
-    SIMPANAN_WAJIB: '3-20000',     // LIABILITAS: Akun untuk menampung Simpanan Wajib.
+    PIUTANG_SEKOLAH: '1-1300',   // ASET: Piutang Gaji/Potongan dari Sekolah.
+    // --- PERBAIKAN: Kode akun disesuaikan dengan screenshot ---
+    SIMPANAN_WAJIB: '3-2000',     // EKUITAS: Akun untuk menampung Simpanan Wajib.
     PIUTANG_MURABAHAH: '1-1200',  // ASET: Akun untuk Piutang Murabahah.
     PENDAPATAN_MARGIN: '4-1000',   // PENDAPATAN: Akun untuk Pendapatan Margin Murabahah.
 };
@@ -42,7 +43,6 @@ const MonthlyProcess: React.FC = () => {
             const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
             const kontrakMap = new Map<string, KontrakMurabahah>(kontrakBerjalan.map(k => [k.anggota_id, k]));
 
-            // --- PERBAIKAN: Baca semua akun dalam satu operasi besar, lalu filter di memori ---
             const allAccountsSnap = await transaction.get(collection(db, "chart_of_accounts"));
             const allAccounts = allAccountsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Akun);
             
@@ -90,7 +90,6 @@ const MonthlyProcess: React.FC = () => {
 
             // --- TAHAP 3: JALANKAN SEMUA OPERASI TULIS (WRITE) ---
             
-            // 3a. Update data anggota dan kontrak
             for (const anggota of anggotaAktif) {
                  const anggotaRef = doc(db, "anggota", anggota.id);
                  transaction.update(anggotaRef, { simpanan_wajib: (anggota.simpanan_wajib || 0) + 50000 });
@@ -104,7 +103,6 @@ const MonthlyProcess: React.FC = () => {
                  }
             }
             
-            // 3b. Buat Jurnal dan update saldo akun
             const totalPotonganGaji = totalSimpananWajib + totalCicilanPokok + totalCicilanMargin;
             const jurnalLines: JurnalEntryLine[] = [
                 { akun_id: akunMap.get(KODE_AKUN_AUTODEBET.PIUTANG_SEKOLAH)!.id, akun_kode: KODE_AKUN_AUTODEBET.PIUTANG_SEKOLAH, akun_nama: akunMap.get(KODE_AKUN_AUTODEBET.PIUTANG_SEKOLAH)!.nama, debit: totalPotonganGaji, kredit: 0 },
@@ -120,7 +118,6 @@ const MonthlyProcess: React.FC = () => {
                 lines: jurnalLines,
             });
 
-            // 3c. Update saldo akun di CoA
             for(const line of jurnalLines) {
                 const acc = akunMap.get(line.akun_kode);
                 if (acc) {
@@ -133,7 +130,6 @@ const MonthlyProcess: React.FC = () => {
                 }
             }
 
-            // 3d. Simpan laporan arsip
             const arsipRef = doc(collection(db, "laporan_arsip"));
             transaction.set(arsipRef, {
                 namaLaporan: `Laporan Autodebet - ${bulanTahun}`,
@@ -179,6 +175,4 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
-
-
 
