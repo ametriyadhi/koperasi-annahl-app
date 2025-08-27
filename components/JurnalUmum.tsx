@@ -2,13 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { JurnalEntry } from '../types';
-import { TrashIcon, PencilIcon } from './icons'; // PencilIcon ditambahkan
+import { TrashIcon, PencilIcon } from './icons'; // Sekarang PencilIcon akan ditemukan
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 };
 
-// Prop 'onEdit' ditambahkan
 interface JurnalUmumProps {
     onDelete: (jurnalId: string) => void;
     onEdit: (jurnal: JurnalEntry) => void; 
@@ -41,7 +40,6 @@ const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete, onEdit }) => {
                             <p className="font-semibold">{entry.deskripsi}</p>
                             <p className="text-sm text-gray-500">{new Date(entry.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                         </div>
-                        {/* Tombol Aksi Baru */}
                         <div className="flex items-center space-x-2">
                              <button 
                                 onClick={() => onEdit(entry)} 
@@ -78,5 +76,6 @@ const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete, onEdit }) => {
 };
 
 export default JurnalUmum;
+
 
 
