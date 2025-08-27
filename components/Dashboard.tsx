@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot } from 'firebase/firestore';
+// getDocs ditambahkan ke import di bawah ini
+import { collection, onSnapshot, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
@@ -23,26 +24,21 @@ const Dashboard: React.FC = () => {
         const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
             const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Anggota[];
             setAnggotaList(members);
-            // Cek jika kedua listener sudah selesai fetch data awal
-            if (kontrakList.length > 0 || snapshot.empty) {
-                setLoading(false);
-            }
         });
 
         // Listener untuk koleksi 'kontrak_murabahah'
         const unsubKontrak = onSnapshot(collection(db, "kontrak_murabahah"), (snapshot) => {
             const contracts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as KontrakMurabahah[];
             setKontrakList(contracts);
-            // Cek jika kedua listener sudah selesai fetch data awal
-            if (anggotaList.length > 0 || snapshot.empty) {
-                setLoading(false);
-            }
         });
         
-        // Handle kasus jika salah satu atau kedua koleksi kosong
-        Promise.all([getDocs(collection(db, "anggota")), getDocs(collection(db, "kontrak_murabahah"))]).then(() => {
+        // Handle kasus jika koleksi kosong, agar loading state tidak stuck di true
+        Promise.all([
+            getDocs(collection(db, "anggota")),
+            getDocs(collection(db, "kontrak_murabahah"))
+        ]).then(() => {
             setLoading(false);
-        });
+        }).catch(() => setLoading(false)); // Tetap set loading false jika ada error
 
 
         // Fungsi cleanup untuk berhenti mendengarkan perubahan saat komponen di-unmount.
@@ -50,30 +46,21 @@ const Dashboard: React.FC = () => {
             unsubAnggota();
             unsubKontrak();
         };
-    }, []); // Dependency array kosong agar hanya berjalan sekali saat mount
+    }, []); 
 
-    // useMemo untuk menghitung metrik utama. Kalkulasi ini hanya akan berjalan kembali
-    // jika data anggotaList atau kontrakList berubah.
+    // useMemo untuk menghitung metrik utama.
     const dashboardMetrics = useMemo(() => {
-        // Menghitung jumlah anggota dengan status 'Aktif'.
         const totalAnggotaAktif = anggotaList.filter(a => a.status === 'Aktif').length;
-        
-        // Menjumlahkan semua jenis simpanan dari semua anggota.
         const totalSimpanan = anggotaList.reduce((acc, member) => {
             return acc + (member.simpanan_pokok || 0) + (member.simpanan_wajib || 0) + (member.simpanan_sukarela || 0);
         }, 0);
-
-        // Menghitung total pembiayaan yang masih berjalan (outstanding).
         const outstandingMurabahah = kontrakList
             .filter(k => k.status === StatusKontrak.BERJALAN)
             .reduce((acc, k) => {
                 const sisaHutang = (k.harga_jual - k.uang_muka) - ((k.cicilan_terbayar || 0) * (k.cicilan_per_bulan || 0));
-                return acc + Math.max(0, sisaHutang); // Pastikan tidak negatif
+                return acc + Math.max(0, sisaHutang);
             }, 0);
-
-        // Menghitung jumlah pembiayaan yang macet.
         const npf = kontrakList.filter(k => k.status === StatusKontrak.MACET).length;
-
         return { totalAnggotaAktif, totalSimpanan, outstandingMurabahah, npf };
     }, [anggotaList, kontrakList]);
 
@@ -91,8 +78,6 @@ const Dashboard: React.FC = () => {
             .slice(0, 5);
     }, [anggotaList]);
 
-
-    // Data untuk kartu KPI (Key Performance Indicator) di bagian atas.
     const kpiData = [
         { title: 'Anggota Aktif', value: loading ? '...' : dashboardMetrics.totalAnggotaAktif.toString(), description: 'Total anggota terdaftar' },
         { title: 'Total Simpanan', value: loading ? '...' : formatCurrency(dashboardMetrics.totalSimpanan), description: 'Pokok, Wajib, & Sukarela' },
@@ -103,7 +88,6 @@ const Dashboard: React.FC = () => {
   return (
     <div>
         <h2 className="text-3xl font-bold text-gray-800 mb-6">Dashboard</h2>
-        {/* Bagian Kartu KPI */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {kpiData.map(kpi => (
                  <div key={kpi.title} className="bg-white p-6 rounded-xl shadow-md flex flex-col justify-between hover:shadow-lg transition-shadow duration-300">
@@ -119,7 +103,6 @@ const Dashboard: React.FC = () => {
         </div>
         
         <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Bagian Ringkasan Pembiayaan Terbaru (Dinamis) */}
             <Card title="Ringkasan Pembiayaan Terbaru">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200">
@@ -158,7 +141,6 @@ const Dashboard: React.FC = () => {
                     </table>
                 </div>
             </Card>
-            {/* Bagian Aktivitas diganti menjadi Anggota Baru (Dinamis) */}
             <Card title="Anggota Baru Bergabung">
                  <ul className="divide-y divide-gray-200">
                      {loading ? (
@@ -186,6 +168,7 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+
 
 
 
