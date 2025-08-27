@@ -1,132 +1,144 @@
 import React, { useState } from 'react';
-import { collection, getDocs, query, where, writeBatch, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Anggota, KontrakMurabahah, ReportRow } from '../types';
-import { StatusKontrak, JenisSimpanan } from '../types';
+import type { Anggota, KontrakMurabahah } from '../types';
+import { Unit } from '../types';
+import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 
+// Tipe data baru khusus untuk laporan ini
+interface AutodebetReportRow {
+  nama: string;
+  unit: Unit;
+  simpananWajib: number;
+  angsuranKe: number | string;
+  cicilanPokok: number;
+  cicilanMargin: number;
+  total: number;
+}
+
 const MonthlyProcess: React.FC = () => {
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastReport, setLastReport] = useState<ReportRow[] | null>(null);
-  const [reportDate, setReportDate] = useState<Date | null>(null);
+  const { settings } = useSettings();
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const processAndGenerate = async () => {
-    if (!confirm("Apakah Anda yakin ingin menjalankan proses autodebet untuk bulan ini? Aksi ini akan mengubah data simpanan dan cicilan secara permanen.")) {
-      return;
-    }
-
-    setIsLoading(true);
-    setLastReport(null);
-
-    const batch = writeBatch(db);
-
+  const generateAutodebetCsv = async () => {
+    setIsGenerating(true);
     try {
-      // 1. Ambil semua anggota aktif
+      // 1. Ambil semua data yang diperlukan
       const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
-      const anggotaSnapshot = await getDocs(anggotaQuery);
+      const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
+
+      const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
+        getDocs(anggotaQuery),
+        getDocs(kontrakQuery),
+      ]);
+
       const anggotaAktif = anggotaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anggota));
-
-      // 2. Ambil semua kontrak murabahah yang sedang berjalan
-      const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", StatusKontrak.BERJALAN));
-      const kontrakSnapshot = await getDocs(kontrakQuery);
       const kontrakBerjalan = kontrakSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KontrakMurabahah));
-      
-      const kontrakMap = new Map<string, KontrakMurabahah>();
-      kontrakBerjalan.forEach(k => kontrakMap.set(k.anggota_id, k));
+      const kontrakMap = new Map(kontrakBerjalan.map(k => [k.anggota_id, k]));
 
-      const reportData: ReportRow[] = [];
-      const currentDate = new Date();
-      const keteranganSimpanan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
-      const keteranganCicilan = `Pembayaran Cicilan Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
-
-      // 3. Proses setiap anggota
-      for (const anggota of anggotaAktif) {
-        const simpananWajib = 50000;
+      // 2. Proses dan hitung data untuk setiap anggota
+      const reportData: AutodebetReportRow[] = anggotaAktif.map(anggota => {
+        const simpananWajib = settings.simpanan_wajib || 50000;
         const kontrak = kontrakMap.get(anggota.id);
-        const cicilanMurabahah = kontrak?.cicilan_per_bulan || 0;
 
-        // Update saldo simpanan wajib
-        const anggotaRef = doc(db, "anggota", anggota.id);
-        batch.update(anggotaRef, { simpanan_wajib: (anggota.simpanan_wajib || 0) + simpananWajib });
+        let angsuranKe: number | string = '';
+        let cicilanPokok = 0;
+        let cicilanMargin = 0;
 
-        // Catat transaksi simpanan wajib
-        const simpananTransaksiRef = doc(collection(db, "anggota", anggota.id, "transaksi"));
-        batch.set(simpananTransaksiRef, {
-            anggota_id: anggota.id,
-            jenis: JenisSimpanan.WAJIB,
-            tanggal: currentDate.toISOString(),
-            tipe: 'Setor',
-            jumlah: simpananWajib,
-            keterangan: keteranganSimpanan,
-        });
-
-        // Proses cicilan jika ada
         if (kontrak) {
-            const kontrakRef = doc(db, "kontrak_murabahah", kontrak.id);
-            const cicilanTerbayarBaru = (kontrak.cicilan_terbayar || 0) + 1;
-            const statusBaru = cicilanTerbayarBaru >= kontrak.tenor ? StatusKontrak.LUNAS : kontrak.status;
-            batch.update(kontrakRef, { 
-                cicilan_terbayar: cicilanTerbayarBaru,
-                status: statusBaru 
-            });
-            // Di aplikasi nyata, kita juga akan mencatat transaksi pembayaran cicilan
+          angsuranKe = (kontrak.cicilan_terbayar || 0) + 1;
+          cicilanPokok = (kontrak.harga_pokok - (kontrak.uang_muka || 0)) / kontrak.tenor;
+          cicilanMargin = (kontrak.margin || 0) / kontrak.tenor;
         }
-        
-        reportData.push({
-          nip: anggota.nip,
-          nama: anggota.nama,
-          simpananWajib,
-          cicilanMurabahah,
-          totalPotongan: simpananWajib + cicilanMurabahah,
-        });
-      }
 
-      // 4. Simpan laporan sebagai arsip di Firestore
-      const arsipRef = doc(collection(db, "laporan_arsip"));
-      batch.set(arsipRef, {
-        namaLaporan: `Laporan Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`,
-        tanggalDibuat: currentDate.toISOString(),
-        dataLaporan: reportData,
+        const total = simpananWajib + cicilanPokok + cicilanMargin;
+
+        return {
+          nama: anggota.nama,
+          unit: anggota.unit,
+          simpananWajib,
+          angsuranKe,
+          cicilanPokok,
+          cicilanMargin,
+          total,
+        };
       });
 
-      // 5. Jalankan semua operasi
-      await batch.commit();
+      // 3. Urutkan data berdasarkan unit
+      const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
+      reportData.sort((a, b) => {
+        const unitComparison = unitOrder.indexOf(a.unit) - unitOrder.indexOf(b.unit);
+        if (unitComparison !== 0) {
+          return unitComparison;
+        }
+        return a.nama.localeCompare(b.nama); // Urutkan berdasarkan nama jika unit sama
+      });
 
-      setLastReport(reportData);
-      setReportDate(currentDate);
-      alert("Proses autodebet bulanan berhasil diselesaikan!");
+      // 4. Buat konten file CSV
+      const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
+      const csvContent = [
+        headers.join(','),
+        ...reportData.map(row => 
+          [
+            `"${row.nama}"`,
+            row.unit,
+            row.simpananWajib,
+            row.angsuranKe,
+            Math.round(row.cicilanPokok), // Pembulatan untuk angka bersih
+            Math.round(row.cicilanMargin),
+            Math.round(row.total)
+          ].join(',')
+        )
+      ].join('\n');
 
-    } catch (error) {
-      console.error("Gagal menjalankan proses bulanan: ", error);
-      alert("Terjadi kesalahan saat memproses data.");
+      // 5. Buat file dan trigger download
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      const fileName = `laporan_autodebet_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`;
+      link.setAttribute('download', fileName);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      alert('Laporan CSV berhasil dibuat!');
+
+    } catch (error: any) {
+      console.error("Gagal membuat laporan autodebet: ", error);
+      alert(`Terjadi kesalahan: ${error.message}`);
     } finally {
-      setIsLoading(false);
+      setIsGenerating(false);
     }
   };
 
   return (
-    <Card title="Proses Autodebet Bulanan">
+    <Card title="Generator Laporan Autodebet">
         <div className="p-6 space-y-6">
-            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg">
-                <h4 className="font-bold">Peringatan!</h4>
-                <p className="text-sm">Aksi ini akan memproses semua setoran wajib (Rp 50.000) dan cicilan murabahah untuk semua anggota aktif. Proses ini bersifat permanen dan tidak dapat diurungkan. Pastikan Anda menjalankan ini hanya **satu kali per bulan**.</p>
+            <div className="p-4 bg-blue-50 text-blue-800 rounded-lg">
+                <h4 className="font-bold">Informasi</h4>
+                <p className="text-sm">
+                  Tombol di bawah ini akan mengambil data terbaru dari semua anggota aktif dan pembiayaan yang berjalan, 
+                  lalu membuat file CSV laporan autodebet sesuai format yang dibutuhkan untuk diserahkan ke bagian SDM.
+                  <br/>
+                  <strong>Aksi ini tidak akan mengubah data apa pun di dalam sistem.</strong>
+                </p>
             </div>
             <div className="text-center">
-                <button onClick={processAndGenerate} disabled={isLoading} className="px-8 py-3 bg-secondary text-white font-bold rounded-lg hover:bg-orange-600 disabled:bg-gray-400 shadow-lg">
-                    {isLoading ? 'Sedang Memproses...' : 'Jalankan Proses Autodebet'}
+                <button 
+                  onClick={generateAutodebetCsv} 
+                  disabled={isGenerating} 
+                  className="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-lime-600 disabled:bg-gray-400 shadow-lg"
+                >
+                    {isGenerating ? 'Sedang Membuat Laporan...' : 'Buat & Unduh Laporan CSV'}
                 </button>
             </div>
-            {lastReport && (
-                <div>
-                    <h3 className="text-lg font-semibold">Hasil Proses pada {reportDate?.toLocaleString('id-ID')}</h3>
-                    <p className="text-sm text-gray-600">Laporan berikut telah dibuat dan diarsipkan. Anda dapat mengunduhnya di menu Laporan.</p>
-                    {/* Di sini bisa ditambahkan pratinjau singkat jika perlu */}
-                </div>
-            )}
         </div>
     </Card>
   );
 };
 
 export default MonthlyProcess;
+
 
