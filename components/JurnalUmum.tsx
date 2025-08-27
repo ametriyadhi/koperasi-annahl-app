@@ -80,5 +80,3 @@ const JurnalUmum: React.FC<JurnalUmumProps> = ({ onDelete, onEdit }) => {
 export default JurnalUmum;
 
 
-
-
