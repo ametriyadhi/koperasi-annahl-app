@@ -29,7 +29,7 @@ const Murabahah: React.FC = () => {
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingKontrak, setEditingKontrak] = useState<KontrakMurabahah | null>(null);
 
-    // --- STATE BARU UNTUK FILTER DAN PENCARIAN ---
+    // State untuk filter dan pencarian
     const [searchTerm, setSearchTerm] = useState('');
     const [unitFilter, setUnitFilter] = useState('Semua');
 
@@ -78,7 +78,6 @@ const Murabahah: React.FC = () => {
 
     const getAnggotaInfo = (anggotaId: string) => anggotaList.find(a => a.id === anggotaId);
 
-    // --- LOGIKA BARU UNTUK MEMFILTER DATA ---
     const filteredContracts = useMemo(() => {
         const anggotaMap = new Map(anggotaList.map(a => [a.id, a]));
         
@@ -96,9 +95,15 @@ const Murabahah: React.FC = () => {
         });
     }, [kontrakList, anggotaList, activeTab, unitFilter, searchTerm]);
 
-    // --- LOGIKA BARU UNTUK MENGHITUNG TOTAL ---
-    const totalPembiayaanFiltered = useMemo(() => {
-        return filteredContracts.reduce((total, kontrak) => total + (kontrak.harga_jual || 0), 0);
+    // --- KALKULASI TOTAL BARU ---
+    const { totalPembiayaan, totalAngsuran, totalSisaCicilan } = useMemo(() => {
+        return filteredContracts.reduce((totals, kontrak) => {
+            const sisaHutang = Math.max(0, (kontrak.harga_jual || 0) - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
+            totals.totalPembiayaan += (kontrak.harga_jual || 0);
+            totals.totalAngsuran += (kontrak.cicilan_per_bulan || 0);
+            totals.totalSisaCicilan += sisaHutang;
+            return totals;
+        }, { totalPembiayaan: 0, totalAngsuran: 0, totalSisaCicilan: 0 });
     }, [filteredContracts]);
 
 
@@ -116,7 +121,6 @@ const Murabahah: React.FC = () => {
                             </button>
                         </div>
                     </div>
-                    {/* --- FORM FILTER DAN PENCARIAN BARU --- */}
                     <div className="mt-4 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
                         <input 
                             type="text"
@@ -189,12 +193,15 @@ const Murabahah: React.FC = () => {
                                     );
                                 })}
                             </tbody>
-                            {/* --- FOOTER BARU UNTUK TOTAL --- */}
-                            <tfoot className="bg-gray-50 border-t-2">
+                            {/* --- FOOTER DIPERBARUI DENGAN TOTAL BARU --- */}
+                            <tfoot className="bg-gray-50 border-t-2 font-bold">
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-3 text-right font-bold text-gray-700">Total Pembiayaan (Hasil Filter)</td>
-                                    <td className="px-4 py-3 text-right font-bold text-gray-900">{formatCurrency(totalPembiayaanFiltered)}</td>
-                                    <td colSpan={4}></td>
+                                    <td colSpan={7} className="px-4 py-2 text-right text-gray-700">Total Pembiayaan</td>
+                                    <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(totalPembiayaan)}</td>
+                                    <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(totalAngsuran)}</td>
+                                    <td colSpan={1}></td>
+                                    <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(totalSisaCicilan)}</td>
+                                    <td></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -217,5 +224,4 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
-
 
