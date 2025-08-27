@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction, getDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-// --- PERUBAHAN DIMULAI ---
 import type { Akun, JurnalEntry, JurnalEntryLine, SaldoNormal } from '../types';
 import { AkunTipe } from '../types';
-// --- PERUBAHAN SELESAI ---
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import AccountForm from './AccountForm';
@@ -12,6 +10,7 @@ import JurnalUmum from './JurnalUmum';
 import ManualJournalForm from './ManualJournalForm';
 import { PlusCircleIcon } from './icons';
 
+// ... (Komponen AccountRow dan formatCurrency tidak berubah)
 type AccountingTab = 'Bagan Akun' | 'Jurnal Umum';
 
 const formatCurrency = (value: number) => {
@@ -31,13 +30,11 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
                 <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>{akun.nama}</div>
             </td>
             <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{akun.tipe}</td>
-            {/* --- PERUBAHAN DIMULAI: MENAMPILKAN SALDO NORMAL --- */}
             <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold">
                 <span className={akun.saldo_normal === 'Debit' ? 'text-blue-600' : 'text-green-600'}>
                     {akun.saldo_normal}
                 </span>
             </td>
-            {/* --- PERUBAHAN SELESAI --- */}
             <td className="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-800">{formatCurrency(akun.saldo)}</td>
             <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
                 <button onClick={() => onEdit(akun)} className="text-primary hover:text-amber-600">Edit</button>
@@ -47,6 +44,7 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
     );
 };
 
+
 const Accounting: React.FC = () => {
     const [activeTab, setActiveTab] = useState<AccountingTab>('Bagan Akun');
     const [accounts, setAccounts] = useState<Akun[]>([]);
@@ -54,6 +52,7 @@ const Accounting: React.FC = () => {
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<Akun | null>(null);
+    const [editingJurnal, setEditingJurnal] = useState<JurnalEntry | null>(null); // State baru untuk edit jurnal
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "chart_of_accounts"), (snapshot) => {
@@ -74,14 +73,26 @@ const Accounting: React.FC = () => {
         setIsAccountModalOpen(false);
         setEditingAccount(null);
     }, []);
+    
+    // Fungsi baru untuk membuka modal jurnal
+    const handleOpenJournalModal = useCallback((jurnal: JurnalEntry | null = null) => {
+        setEditingJurnal(jurnal);
+        setIsJournalModalOpen(true);
+    }, []);
+
+    // Fungsi baru untuk menutup modal jurnal
+    const handleCloseJournalModal = useCallback(() => {
+        setIsJournalModalOpen(false);
+        setEditingJurnal(null);
+    }, []);
 
     const handleSaveAccount = useCallback(async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
+        // ... (fungsi ini tidak berubah dari sebelumnya)
         try {
             if (editingAccount) {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
                 await updateDoc(docRef, akunData);
             } else {
-                // --- PERUBAHAN DIMULAI: Menambahkan saldo_normal saat membuat akun baru ---
                 const saldoNormalMap: Record<AkunTipe, SaldoNormal> = {
                     [AkunTipe.ASET]: 'Debit',
                     [AkunTipe.BEBAN]: 'Debit',
@@ -95,7 +106,6 @@ const Accounting: React.FC = () => {
                     saldo_normal: saldoNormalMap[akunData.tipe]
                 };
                 await addDoc(collection(db, "chart_of_accounts"), finalData);
-                // --- PERUBAHAN SELESAI ---
             }
             handleCloseAccountModal();
         } catch (error) {
@@ -104,61 +114,83 @@ const Accounting: React.FC = () => {
         }
     }, [editingAccount, handleCloseAccountModal]);
 
-    // ... (sisa kode seperti handleDeleteAccount, handleSaveManualJournal, dll. tidak berubah)
-
-    const handleDeleteAccount = useCallback(async (id: string) => {
-        if (window.confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
-            try {
-                await deleteDoc(doc(db, "chart_of_accounts", id));
-            } catch (error) {
-                console.error("Error deleting account: ", error);
-                alert("Gagal menghapus akun.");
-            }
-        }
-    }, []);
-
-    const handleSaveManualJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[]) => {
+    // --- FUNGSI BARU DAN LOGIKA UPDATE JURNAL ---
+    const handleSaveOrUpdateJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[], entryId?: string) => {
         try {
             await runTransaction(db, async (transaction) => {
-                const accountRefs = lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
-                const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
-
-                const jurnalRef = doc(collection(db, "jurnal_umum"));
-                transaction.set(jurnalRef, {
-                    tanggal: new Date().toISOString(),
-                    deskripsi,
-                    lines,
-                });
-
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    const accDoc = accountDocs[i];
-                    if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
-                    
-                    const accountData = accDoc.data() as Akun;
-                    const currentSaldo = accountData.saldo || 0;
-                    
-                    // Logika penambahan/pengurangan saldo berdasarkan Saldo Normal
-                    let newSaldo;
-                    if (accountData.saldo_normal === 'Debit') {
-                        newSaldo = currentSaldo + line.debit - line.kredit;
-                    } else { // Saldo Normal adalah Kredit
-                        newSaldo = currentSaldo - line.debit + line.kredit;
+                const accountsMap = new Map<string, Akun>();
+                
+                // Ambil data semua akun yang terlibat
+                const allAccountIds = new Set(lines.map(l => l.akun_id));
+                if (entryId) {
+                    const oldJurnalDoc = await transaction.get(doc(db, "jurnal_umum", entryId));
+                    if (oldJurnalDoc.exists()) {
+                        oldJurnalDoc.data().lines.forEach((l: JurnalEntryLine) => allAccountIds.add(l.akun_id));
                     }
+                }
+                for (const accId of allAccountIds) {
+                    const accDoc = await transaction.get(doc(db, "chart_of_accounts", accId));
+                    if (accDoc.exists()) {
+                        accountsMap.set(accId, accDoc.data() as Akun);
+                    }
+                }
 
-                    transaction.update(accountRefs[i], { saldo: newSaldo });
+                // Jika ini adalah EDIT, batalkan dulu efek jurnal lama
+                if (entryId) {
+                    const oldJurnalRef = doc(db, "jurnal_umum", entryId);
+                    const oldJurnalDoc = await transaction.get(oldJurnalRef);
+                    if (oldJurnalDoc.exists()) {
+                        const oldLines = oldJurnalDoc.data().lines as JurnalEntryLine[];
+                        for (const line of oldLines) {
+                            const acc = accountsMap.get(line.akun_id);
+                            if (acc) {
+                                acc.saldo = acc.saldo_normal === 'Debit' 
+                                    ? acc.saldo - line.debit + line.kredit 
+                                    : acc.saldo + line.debit - line.kredit;
+                            }
+                        }
+                    }
+                }
+
+                // Terapkan efek jurnal baru (baik untuk create maupun update)
+                for (const line of lines) {
+                    const acc = accountsMap.get(line.akun_id);
+                    if (acc) {
+                        acc.saldo = acc.saldo_normal === 'Debit'
+                            ? acc.saldo + line.debit - line.kredit
+                            : acc.saldo - line.debit + line.kredit;
+                    } else {
+                        throw new Error(`Akun dengan ID ${line.akun_id} tidak ditemukan.`);
+                    }
+                }
+
+                // Simpan perubahan saldo ke semua akun yang terpengaruh
+                for (const [id, acc] of accountsMap.entries()) {
+                    transaction.update(doc(db, "chart_of_accounts", id), { saldo: acc.saldo });
+                }
+
+                // Simpan atau update dokumen jurnal itu sendiri
+                if (entryId) {
+                    transaction.update(doc(db, "jurnal_umum", entryId), { deskripsi, lines });
+                } else {
+                    const newJurnalRef = doc(collection(db, "jurnal_umum"));
+                    transaction.set(newJurnalRef, { tanggal: new Date().toISOString(), deskripsi, lines });
                 }
             });
-            alert("Jurnal manual berhasil disimpan!");
-            setIsJournalModalOpen(false);
-        } catch (error) {
-            console.error("Gagal menyimpan jurnal manual: ", error);
-            alert(`Terjadi kesalahan: ${error}`);
+
+            alert(`Jurnal berhasil ${entryId ? 'diperbarui' : 'disimpan'}!`);
+            handleCloseJournalModal();
+
+        } catch (error: any) {
+            console.error("Gagal menyimpan jurnal: ", error);
+            alert(`Terjadi kesalahan: ${error.message}`);
         }
-    }, []);
+    }, [handleCloseJournalModal]);
+
 
     const handleDeleteJurnal = useCallback(async (jurnalId: string) => {
-        if (!window.confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
+        // ... (Fungsi ini tidak berubah dari sebelumnya)
+         if (!window.confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
 
         try {
             await runTransaction(db, async (transaction) => {
@@ -168,36 +200,33 @@ const Accounting: React.FC = () => {
 
                 const jurnalData = jurnalDoc.data() as JurnalEntry;
 
-                const accountRefs = jurnalData.lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
-                const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
-
-                for (let i = 0; i < jurnalData.lines.length; i++) {
-                    const line = jurnalData.lines[i];
-                    const accDoc = accountDocs[i];
+                for (const line of jurnalData.lines) {
+                    const accRef = doc(db, "chart_of_accounts", line.akun_id);
+                    const accDoc = await transaction.get(accRef);
                     if (accDoc.exists()) {
                         const accountData = accDoc.data() as Akun;
                         const currentSaldo = accountData.saldo || 0;
                         
-                        // Logika pembalikan saldo berdasarkan Saldo Normal
                         let newSaldo;
                         if (accountData.saldo_normal === 'Debit') {
-                            newSaldo = currentSaldo - line.debit + line.kredit; // Dibalik
-                        } else { // Saldo Normal adalah Kredit
-                            newSaldo = currentSaldo + line.debit - line.kredit; // Dibalik
+                            newSaldo = currentSaldo - line.debit + line.kredit;
+                        } else { 
+                            newSaldo = currentSaldo + line.debit - line.kredit;
                         }
-                        transaction.update(accountRefs[i], { saldo: newSaldo });
+                        transaction.update(accRef, { saldo: newSaldo });
                     }
                 }
                 transaction.delete(jurnalRef);
             });
             alert("Jurnal berhasil dihapus dan saldo telah dikembalikan.");
-        } catch (error) {
+        } catch (error: any) {
             console.error("Gagal menghapus jurnal: ", error);
-            alert(`Terjadi kesalahan: ${error}`);
+            alert(`Terjadi kesalahan: ${error.message}`);
         }
     }, []);
 
     const renderedAccountTree = useMemo(() => {
+        // ... (Fungsi ini tidak berubah dari sebelumnya)
         const renderRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
             return allAccounts
                 .filter(a => a.parent_kode === parentId)
@@ -217,6 +246,7 @@ const Accounting: React.FC = () => {
 
     return (
         <>
+            {/* ... (Bagian UI tidak banyak berubah, hanya pemanggilan fungsinya) ... */}
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     {(['Bagan Akun', 'Jurnal Umum'] as AccountingTab[]).map((tab) => (
@@ -251,9 +281,7 @@ const Accounting: React.FC = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode Akun</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Akun</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
-                                    {/* --- PERUBAHAN DIMULAI: MENAMBAHKAN HEADER BARU --- */}
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo Normal</th>
-                                    {/* --- PERUBAHAN SELESAI --- */}
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                 </tr>
@@ -270,13 +298,13 @@ const Accounting: React.FC = () => {
                 <Card>
                     <div className="flex justify-between items-center p-4 sm:p-6 border-b">
                         <h3 className="text-lg font-semibold text-gray-800">Jurnal Umum</h3>
-                        <button onClick={() => setIsJournalModalOpen(true)} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                        <button onClick={() => handleOpenJournalModal(null)} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
                             <PlusCircleIcon className="w-5 h-5 mr-2" />
                             Buat Jurnal Manual
                         </button>
                     </div>
                     <div className="p-6">
-                        <JurnalUmum onDelete={handleDeleteJurnal} />
+                        <JurnalUmum onDelete={handleDeleteJurnal} onEdit={handleOpenJournalModal} />
                     </div>
                 </Card>
             )}
@@ -290,11 +318,12 @@ const Accounting: React.FC = () => {
                 />
             </Modal>
 
-            <Modal isOpen={isJournalModalOpen} onClose={() => setIsJournalModalOpen(false)} title="Buat Jurnal Manual">
+            <Modal isOpen={isJournalModalOpen} onClose={handleCloseJournalModal} title={editingJurnal ? 'Edit Jurnal Manual' : 'Buat Jurnal Manual'}>
                 <ManualJournalForm
-                    onSave={handleSaveManualJournal}
-                    onClose={() => setIsJournalModalOpen(false)}
+                    onSave={handleSaveOrUpdateJournal}
+                    onClose={handleCloseJournalModal}
                     accounts={accounts}
+                    initialData={editingJurnal}
                 />
             </Modal>
         </>
@@ -302,5 +331,6 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
 
 
