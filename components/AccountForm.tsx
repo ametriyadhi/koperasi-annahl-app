@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import type { Akun } from '../types';
-import { AkunTipe } from '../types';
+import React, { useState, useEffect } from 'react';
+// --- PERUBAHAN DIMULAI ---
+import type { Akun, AkunTipe, SaldoNormal } from '../types';
+// --- PERUBAHAN SELESAI ---
+import { AkunTipe as AkunTipeEnum } from '../types';
 
 interface AccountFormProps {
   onSave: (akun: Omit<Akun, 'id' | 'saldo'>) => void;
@@ -9,13 +11,36 @@ interface AccountFormProps {
   parentAccounts: Akun[];
 }
 
+// --- PERUBAHAN DIMULAI ---
+// Peta untuk menentukan Saldo Normal berdasarkan Tipe Akun
+const saldoNormalMap: Record<AkunTipe, SaldoNormal> = {
+  [AkunTipeEnum.ASET]: 'Debit',
+  [AkunTipeEnum.BEBAN]: 'Debit',
+  [AkunTipeEnum.LIABILITAS]: 'Kredit',
+  [AkunTipeEnum.EKUITAS]: 'Kredit',
+  [AkunTipeEnum.PENDAPATAN]: 'Kredit',
+};
+// --- PERUBAHAN SELESAI ---
+
 const AccountForm: React.FC<AccountFormProps> = ({ onSave, onClose, initialData, parentAccounts }) => {
   const [formData, setFormData] = useState({
     kode: initialData?.kode || '',
     nama: initialData?.nama || '',
-    tipe: initialData?.tipe || AkunTipe.ASET,
+    tipe: initialData?.tipe || AkunTipeEnum.ASET,
     parent_kode: initialData?.parent_kode || '',
+    // --- PERUBAHAN DIMULAI ---
+    saldo_normal: initialData?.saldo_normal || saldoNormalMap[AkunTipeEnum.ASET],
+    // --- PERUBAHAN SELESAI ---
   });
+
+  // --- EFEK BARU UNTUK MENGUPDATE SALDO NORMAL SECARA OTOMATIS ---
+  useEffect(() => {
+    setFormData(prev => ({
+      ...prev,
+      saldo_normal: saldoNormalMap[prev.tipe],
+    }));
+  }, [formData.tipe]);
+
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -41,14 +66,20 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSave, onClose, initialData,
         <div>
           <label className="block text-sm font-medium text-gray-700">Tipe Akun</label>
           <select name="tipe" value={formData.tipe} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-            {Object.values(AkunTipe).map(t => <option key={t} value={t}>{t}</option>)}
+            {Object.values(AkunTipeEnum).map(t => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        {/* --- PERUBAHAN DIMULAI: MENAMPILKAN SALDO NORMAL --- */}
         <div>
+          <label className="block text-sm font-medium text-gray-700">Saldo Normal</label>
+          <input type="text" name="saldo_normal" value={formData.saldo_normal} readOnly className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100 text-gray-500" />
+        </div>
+        {/* --- PERUBAHAN SELESAI --- */}
+        <div className="md:col-span-2">
           <label className="block text-sm font-medium text-gray-700">Akun Induk (Parent)</label>
           <select name="parent_kode" value={formData.parent_kode} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-            <option value="">-- Tidak Ada --</option>
-            {parentAccounts.map(p => <option key={p.id} value={p.kode}>{p.kode} - {p.nama}</option>)}
+            <option value="">-- Tidak Ada (Akun Utama) --</option>
+            {parentAccounts.filter(p => !p.parent_kode).map(p => <option key={p.id} value={p.kode}>{p.kode} - {p.nama}</option>)}
           </select>
         </div>
       </div>
@@ -65,3 +96,4 @@ const AccountForm: React.FC<AccountFormProps> = ({ onSave, onClose, initialData,
 };
 
 export default AccountForm;
+
