@@ -1,41 +1,54 @@
-import React, { useState, useMemo } from 'react';
-import type { Akun, JurnalEntryLine } from '../types';
+import React, { useState, useMemo, useEffect } from 'react';
+import type { Akun, JurnalEntry, JurnalEntryLine } from '../types';
 import { PlusCircleIcon, TrashIcon } from './icons';
 
 interface ManualJournalFormProps {
-  onSave: (deskripsi: string, lines: JurnalEntryLine[]) => void;
+  onSave: (deskripsi: string, lines: JurnalEntryLine[], entryId?: string) => void;
   onClose: () => void;
   accounts: Akun[];
+  initialData?: JurnalEntry | null; // Prop baru untuk data edit
 }
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 }
 
-let nextId = 3;
+let nextIdCounter = 100; // Counter untuk ID baris sementara
 
-const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, accounts }) => {
+const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, accounts, initialData }) => {
     const [deskripsi, setDeskripsi] = useState('');
     const [lines, setLines] = useState([
         { id: 1, akun_id: '', debit: 0, kredit: 0 },
         { id: 2, akun_id: '', debit: 0, kredit: 0 },
     ]);
 
+    // Efek untuk mengisi form jika dalam mode edit
+    useEffect(() => {
+        if (initialData) {
+            setDeskripsi(initialData.deskripsi);
+            setLines(initialData.lines.map((line, index) => ({
+                id: index + 1, // Beri ID sementara
+                akun_id: line.akun_id,
+                debit: line.debit,
+                kredit: line.kredit,
+            })));
+        }
+    }, [initialData]);
+
     const handleLineChange = (id: number, field: 'akun_id' | 'debit' | 'kredit', value: string) => {
         setLines(lines.map(line => {
             if (line.id !== id) return line;
-
             if (field === 'akun_id') {
                 return { ...line, akun_id: value };
             } else {
-                const numericValue = parseFloat(value);
+                const numericValue = parseFloat(value.replace(/[^0-9]/g, ''));
                 return { ...line, [field]: isNaN(numericValue) ? 0 : numericValue };
             }
         }));
     };
     
     const addLine = () => {
-        setLines([...lines, { id: nextId++, akun_id: '', debit: 0, kredit: 0 }]);
+        setLines([...lines, { id: nextIdCounter++, akun_id: '', debit: 0, kredit: 0 }]);
     };
 
     const removeLine = (id: number) => {
@@ -48,7 +61,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
         return {
             totalDebit,
             totalKredit,
-            isBalanced: totalDebit === totalKredit && totalDebit > 0,
+            isBalanced: totalDebit.toFixed(2) === totalKredit.toFixed(2) && totalDebit > 0,
         };
     }, [lines]);
 
@@ -79,15 +92,16 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
             alert("Jurnal harus memiliki setidaknya dua baris (satu debit dan satu kredit) yang valid.");
             return;
         }
-
-        onSave(deskripsi, finalLines);
+        // Kirim ID entri jika sedang mode edit
+        onSave(deskripsi, finalLines, initialData?.id);
     };
 
     const availableAccounts = accounts.filter(a => a.parent_kode);
 
     return (
         <div className="space-y-4 text-sm">
-            <div>
+            {/* ... UI form tidak berubah, hanya logikanya ... */}
+             <div>
                 <label className="block text-sm font-medium text-gray-700">Deskripsi Jurnal</label>
                 <input type="text" value={deskripsi} onChange={e => setDeskripsi(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" placeholder="cth: Pembelian ATK bulan Agustus" required />
             </div>
@@ -152,7 +166,7 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
                     Batal
                 </button>
                  <button onClick={handleSubmit} disabled={!isBalanced} className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-amber-500 disabled:bg-gray-400 disabled:cursor-not-allowed">
-                    Simpan Jurnal
+                    {initialData ? 'Update Jurnal' : 'Simpan Jurnal'}
                 </button>
             </div>
         </div>
@@ -160,4 +174,5 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
 };
 
 export default ManualJournalForm;
+
 
