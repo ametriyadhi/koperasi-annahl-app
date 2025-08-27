@@ -6,14 +6,14 @@ interface ManualJournalFormProps {
   onSave: (deskripsi: string, lines: JurnalEntryLine[], entryId?: string) => void;
   onClose: () => void;
   accounts: Akun[];
-  initialData?: JurnalEntry | null; // Prop baru untuk data edit
+  initialData?: JurnalEntry | null;
 }
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 }
 
-let nextIdCounter = 100; // Counter untuk ID baris sementara
+let nextIdCounter = 100;
 
 const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, accounts, initialData }) => {
     const [deskripsi, setDeskripsi] = useState('');
@@ -22,12 +22,11 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
         { id: 2, akun_id: '', debit: 0, kredit: 0 },
     ]);
 
-    // Efek untuk mengisi form jika dalam mode edit
     useEffect(() => {
         if (initialData) {
             setDeskripsi(initialData.deskripsi);
             setLines(initialData.lines.map((line, index) => ({
-                id: index + 1, // Beri ID sementara
+                id: index + 1,
                 akun_id: line.akun_id,
                 debit: line.debit,
                 kredit: line.kredit,
@@ -92,7 +91,6 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
             alert("Jurnal harus memiliki setidaknya dua baris (satu debit dan satu kredit) yang valid.");
             return;
         }
-        // Kirim ID entri jika sedang mode edit
         onSave(deskripsi, finalLines, initialData?.id);
     };
 
@@ -100,7 +98,6 @@ const ManualJournalForm: React.FC<ManualJournalFormProps> = ({ onSave, onClose, 
 
     return (
         <div className="space-y-4 text-sm">
-            {/* ... UI form tidak berubah, hanya logikanya ... */}
              <div>
                 <label className="block text-sm font-medium text-gray-700">Deskripsi Jurnal</label>
                 <input type="text" value={deskripsi} onChange={e => setDeskripsi(e.target.value)} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" placeholder="cth: Pembelian ATK bulan Agustus" required />
