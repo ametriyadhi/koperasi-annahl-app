@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Akun, JurnalEntry, JurnalEntryLine } from '../types';
+// --- PERUBAHAN DIMULAI ---
+import type { Akun, JurnalEntry, JurnalEntryLine, SaldoNormal } from '../types';
+import { AkunTipe } from '../types';
+// --- PERUBAHAN SELESAI ---
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import AccountForm from './AccountForm';
@@ -28,6 +31,13 @@ const AccountRow: React.FC<{ akun: Akun, level: number, onEdit: (akun: Akun) => 
                 <div className={`text-sm ${isParent ? 'text-gray-800' : 'text-gray-700'}`}>{akun.nama}</div>
             </td>
             <td className="px-6 py-3 whitespace-nowrap text-sm text-gray-500">{akun.tipe}</td>
+            {/* --- PERUBAHAN DIMULAI: MENAMPILKAN SALDO NORMAL --- */}
+            <td className="px-6 py-3 whitespace-nowrap text-sm font-semibold">
+                <span className={akun.saldo_normal === 'Debit' ? 'text-blue-600' : 'text-green-600'}>
+                    {akun.saldo_normal}
+                </span>
+            </td>
+            {/* --- PERUBAHAN SELESAI --- */}
             <td className="px-6 py-3 whitespace-nowrap text-sm text-right font-medium text-gray-800">{formatCurrency(akun.saldo)}</td>
             <td className="px-6 py-3 whitespace-nowrap text-right text-sm font-medium space-x-2">
                 <button onClick={() => onEdit(akun)} className="text-primary hover:text-amber-600">Edit</button>
@@ -71,7 +81,21 @@ const Accounting: React.FC = () => {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
                 await updateDoc(docRef, akunData);
             } else {
-                await addDoc(collection(db, "chart_of_accounts"), { ...akunData, saldo: 0 });
+                // --- PERUBAHAN DIMULAI: Menambahkan saldo_normal saat membuat akun baru ---
+                const saldoNormalMap: Record<AkunTipe, SaldoNormal> = {
+                    [AkunTipe.ASET]: 'Debit',
+                    [AkunTipe.BEBAN]: 'Debit',
+                    [AkunTipe.LIABILITAS]: 'Kredit',
+                    [AkunTipe.EKUITAS]: 'Kredit',
+                    [AkunTipe.PENDAPATAN]: 'Kredit',
+                };
+                const finalData = {
+                    ...akunData,
+                    saldo: 0,
+                    saldo_normal: saldoNormalMap[akunData.tipe]
+                };
+                await addDoc(collection(db, "chart_of_accounts"), finalData);
+                // --- PERUBAHAN SELESAI ---
             }
             handleCloseAccountModal();
         } catch (error) {
@@ -80,8 +104,10 @@ const Accounting: React.FC = () => {
         }
     }, [editingAccount, handleCloseAccountModal]);
 
+    // ... (sisa kode seperti handleDeleteAccount, handleSaveManualJournal, dll. tidak berubah)
+
     const handleDeleteAccount = useCallback(async (id: string) => {
-        if (confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
+        if (window.confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) {
             try {
                 await deleteDoc(doc(db, "chart_of_accounts", id));
             } catch (error) {
@@ -108,8 +134,18 @@ const Accounting: React.FC = () => {
                     const line = lines[i];
                     const accDoc = accountDocs[i];
                     if (!accDoc.exists()) throw new Error(`Akun ${line.akun_nama} tidak ditemukan!`);
-                    const currentSaldo = accDoc.data().saldo || 0;
-                    const newSaldo = currentSaldo + line.debit - line.kredit;
+                    
+                    const accountData = accDoc.data() as Akun;
+                    const currentSaldo = accountData.saldo || 0;
+                    
+                    // Logika penambahan/pengurangan saldo berdasarkan Saldo Normal
+                    let newSaldo;
+                    if (accountData.saldo_normal === 'Debit') {
+                        newSaldo = currentSaldo + line.debit - line.kredit;
+                    } else { // Saldo Normal adalah Kredit
+                        newSaldo = currentSaldo - line.debit + line.kredit;
+                    }
+
                     transaction.update(accountRefs[i], { saldo: newSaldo });
                 }
             });
@@ -122,7 +158,7 @@ const Accounting: React.FC = () => {
     }, []);
 
     const handleDeleteJurnal = useCallback(async (jurnalId: string) => {
-        if (!confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
+        if (!window.confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
 
         try {
             await runTransaction(db, async (transaction) => {
@@ -139,8 +175,16 @@ const Accounting: React.FC = () => {
                     const line = jurnalData.lines[i];
                     const accDoc = accountDocs[i];
                     if (accDoc.exists()) {
-                        const currentSaldo = accDoc.data().saldo || 0;
-                        const newSaldo = currentSaldo - line.debit + line.kredit;
+                        const accountData = accDoc.data() as Akun;
+                        const currentSaldo = accountData.saldo || 0;
+                        
+                        // Logika pembalikan saldo berdasarkan Saldo Normal
+                        let newSaldo;
+                        if (accountData.saldo_normal === 'Debit') {
+                            newSaldo = currentSaldo - line.debit + line.kredit; // Dibalik
+                        } else { // Saldo Normal adalah Kredit
+                            newSaldo = currentSaldo + line.debit - line.kredit; // Dibalik
+                        }
                         transaction.update(accountRefs[i], { saldo: newSaldo });
                     }
                 }
@@ -207,12 +251,15 @@ const Accounting: React.FC = () => {
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Kode Akun</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Akun</th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tipe</th>
+                                    {/* --- PERUBAHAN DIMULAI: MENAMBAHKAN HEADER BARU --- */}
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Saldo Normal</th>
+                                    {/* --- PERUBAHAN SELESAI --- */}
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Saldo</th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white">
-                                {loading ? <tr><td colSpan={5} className="p-6 text-center">Memuat data...</td></tr> : renderedAccountTree}
+                                {loading ? <tr><td colSpan={6} className="p-6 text-center">Memuat data...</td></tr> : renderedAccountTree}
                             </tbody>
                         </table>
                     </div>
@@ -255,4 +302,5 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
 
