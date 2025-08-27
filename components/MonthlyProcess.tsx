@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { collection, getDocs, query, where, doc, writeBatch, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
-import { Unit, StatusKontrak } from '../types';
+import { Unit, StatusKontrak, JenisSimpanan } from '../types'; // JenisSimpanan ditambahkan
 import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 
@@ -21,8 +21,8 @@ interface AutodebetReportRow {
 interface ProcessData {
   anggotaToUpdate: { id: string, newSimpananWajib: number }[];
   kontrakToUpdate: { id: string, newCicilanTerbayar: number, newStatus: StatusKontrak }[];
-  csvContent: string; // Menambahkan konten CSV untuk diarsipkan
-  reportName: string; // Menambahkan nama laporan
+  csvContent: string;
+  reportName: string;
 }
 
 const MonthlyProcess: React.FC = () => {
@@ -139,27 +139,43 @@ const MonthlyProcess: React.FC = () => {
     setIsLoading(true);
     try {
       const batch = writeBatch(db);
+      const currentDate = new Date();
+      const keterangan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long' })}`;
 
+      // Update simpanan anggota & BUAT CATATAN TRANSAKSI
       processData.anggotaToUpdate.forEach(item => {
-        const ref = doc(db, "anggota", item.id);
-        batch.update(ref, { simpanan_wajib: item.newSimpananWajib });
+        const anggotaRef = doc(db, "anggota", item.id);
+        batch.update(anggotaRef, { simpanan_wajib: item.newSimpananWajib });
+
+        // --- PENAMBAHAN: Buat dokumen baru di sub-koleksi transaksi ---
+        const transaksiRef = doc(collection(db, "anggota", item.id, "transaksi"));
+        batch.set(transaksiRef, {
+            anggota_id: item.id,
+            jenis: JenisSimpanan.WAJIB,
+            tanggal: currentDate.toISOString(),
+            tipe: 'Setor',
+            jumlah: settings.simpanan_wajib || 50000,
+            keterangan: keterangan,
+        });
+        // --- AKHIR PENAMBAHAN ---
       });
 
+      // Update angsuran kontrak
       processData.kontrakToUpdate.forEach(item => {
         const ref = doc(db, "kontrak_murabahah", item.id);
         batch.update(ref, { cicilan_terbayar: item.newCicilanTerbayar, status: item.newStatus });
       });
 
-      // --- PENAMBAHAN: Simpan laporan ke arsip ---
-      const arsipRef = collection(db, "laporan_arsip");
-      await addDoc(arsipRef, {
+      // Simpan laporan ke arsip
+      const arsipRef = doc(collection(db, "laporan_arsip"));
+      batch.set(arsipRef, {
           namaLaporan: processData.reportName,
           tanggalDibuat: new Date().toISOString(),
-          dataLaporan: processData.csvContent, // Simpan sebagai string CSV
+          dataLaporan: processData.csvContent,
       });
 
       await batch.commit();
-      alert("Proses bulanan berhasil dijalankan! Data telah diperbarui dan laporan telah diarsipkan.");
+      alert("Proses bulanan berhasil dijalankan! Data simpanan, angsuran, dan riwayat transaksi telah diperbarui. Laporan juga telah diarsipkan.");
       setProcessData(null);
     } catch (error: any) {
       alert(`Gagal menjalankan proses: ${error.message}`);
@@ -208,6 +224,7 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
+
 
 
 
