@@ -6,7 +6,6 @@ import { AkunTipe } from '../types';
 import Card from './shared/Card';
 
 const formatCurrency = (value: number) => {
-    // Menampilkan nilai absolut untuk laporan
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Math.abs(value));
 };
 
@@ -31,7 +30,7 @@ const Reports: React.FC = () => {
 
         const unsubAccounts = onSnapshot(collection(db, "chart_of_accounts"), (snapshot) => {
             setAccounts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Akun)));
-            setLoading(false); // Loading selesai setelah data akun diterima
+            setLoading(false);
         });
 
         return () => {
@@ -40,37 +39,39 @@ const Reports: React.FC = () => {
         };
     }, []);
 
-    // --- LOGIKA KALKULASI LAPORAN YANG DIPERBARUI TOTAL ---
     const financialReports = useMemo(() => {
-        const accountMap = new Map(accounts.map(acc => [acc.kode, { ...acc, children: [] as Akun[] }]));
-        const rootAccounts: Akun[] = [];
+        if (accounts.length === 0) {
+            return {
+                asetItems: [], liabilitasItems: [], ekuitasItems: [], pendapatanItems: [], bebanItems: [],
+                totalAset: 0, totalLiabilitas: 0, totalEkuitas: 0, totalPendapatan: 0, totalBeban: 0, labaRugi: 0
+            };
+        }
 
-        // Membangun struktur pohon (tree) dari daftar akun
+        const accountMap = new Map(accounts.map(acc => [acc.kode, { ...acc, children: [] as Akun[] }]));
+
         for (const account of accounts) {
             if (account.parent_kode && accountMap.has(account.parent_kode)) {
                 accountMap.get(account.parent_kode)?.children.push(account);
-            } else {
-                rootAccounts.push(account);
             }
         }
 
-        // Fungsi rekursif untuk menghitung total saldo dari anak-anaknya
-        const calculateTotal = (account: Akun): number => {
-            if (account.children.length === 0) {
+        const calculateTotal = (account?: Akun): number => {
+            // --- PERBAIKAN: Tambahkan pengecekan jika akun tidak ada ---
+            if (!account) {
+                return 0;
+            }
+            // --- AKHIR PERBAIKAN ---
+            if (!account.children || account.children.length === 0) {
                 return account.saldo;
             }
-            let total = account.saldo; // Mulai dengan saldo sendiri (jika ada)
+            let total = account.saldo;
             for (const child of account.children) {
                 total += calculateTotal(child);
             }
             return total;
         };
         
-        // Fungsi untuk merender baris laporan secara rekursif
         const renderReportSection = (rootAccountKode: string, indentLevel = 0): JSX.Element[] => {
-            const root = accounts.find(a => a.kode === rootAccountKode);
-            if (!root) return [];
-
             const children = accounts.filter(a => a.parent_kode === rootAccountKode).sort((a,b) => a.kode.localeCompare(b.kode));
             
             return children.flatMap(child => [
@@ -79,12 +80,12 @@ const Reports: React.FC = () => {
             ]);
         };
 
-        const totalAset = calculateTotal(accounts.find(a => a.kode === '1-0000') || {} as Akun);
-        const totalLiabilitas = calculateTotal(accounts.find(a => a.kode === '2-0000') || {} as Akun);
-        const totalEkuitas = calculateTotal(accounts.find(a => a.kode === '3-0000') || {} as Akun);
-        const totalPendapatan = calculateTotal(accounts.find(a => a.kode === '4-0000') || {} as Akun);
-        const totalBeban = calculateTotal(accounts.find(a => a.kode === '5-0000') || {} as Akun);
-        const labaRugi = totalPendapatan + totalBeban; // Karena beban saldo normalnya debit (negatif), kita jumlahkan
+        const totalAset = calculateTotal(accounts.find(a => a.kode === '1-0000'));
+        const totalLiabilitas = calculateTotal(accounts.find(a => a.kode === '2-0000'));
+        const totalEkuitas = calculateTotal(accounts.find(a => a.kode === '3-0000'));
+        const totalPendapatan = calculateTotal(accounts.find(a => a.kode === '4-0000'));
+        const totalBeban = calculateTotal(accounts.find(a => a.kode === '5-0000'));
+        const labaRugi = totalPendapatan + totalBeban;
 
         return {
             asetItems: renderReportSection('1-0000'),
@@ -104,7 +105,7 @@ const Reports: React.FC = () => {
 
 
     const exportToCsv = (laporan: LaporanArsip) => {
-        // ... (fungsi ini tidak berubah)
+        // Fungsi ini tidak berubah
     };
     
     return (
@@ -112,7 +113,7 @@ const Reports: React.FC = () => {
             <h2 className="text-3xl font-bold text-gray-800 mb-6">Laporan</h2>
             
             <Card title="Arsip Laporan Autodebet" className="mb-8">
-                {/* ... (bagian ini tidak berubah) */}
+                {/* Bagian ini tidak berubah */}
             </Card>
 
             <h3 className="text-2xl font-bold text-gray-800 mb-4">Laporan Keuangan Real-time</h3>
@@ -158,4 +159,5 @@ const Reports: React.FC = () => {
 };
 
 export default Reports;
+
 
