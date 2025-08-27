@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { collection, getDocs, query, where, doc, runTransaction } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, runTransaction, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah, ReportRow, Akun, JurnalEntryLine } from '../types';
 import { StatusKontrak } from '../types';
 import Card from './shared/Card';
 
-// PENTING: Pastikan kode-kode ini sesuai dengan yang ada di Bagan Akun Anda.
+// --- KODE AKUN DIPERBARUI ---
+// PENTING: Pastikan semua akun dengan kode di bawah ini SUDAH ADA di menu Akuntansi -> Bagan Akun Anda.
+// Jika belum ada, proses ini akan gagal.
 const KODE_AKUN_AUTODEBET = {
-    PIUTANG_SEKOLAH: '1-1300', // Debit: Total potongan gaji
-    SIMPANAN_WAJIB: '3-2000',   // Kredit: Total simpanan wajib
-    PIUTANG_MURABAHAH: '1-1200',// Kredit: Total pembayaran pokok murabahah
-    PENDAPATAN_MARGIN: '4-1000', // Kredit: Total pembayaran margin murabahah
+    PIUTANG_SEKOLAH: '1-1300',   // ASET: Piutang Gaji/Potongan dari Sekolah. Buat akun ini jika belum ada.
+    SIMPANAN_WAJIB: '3-20000',     // LIABILITAS: Akun untuk menampung Simpanan Wajib.
+    PIUTANG_MURABAHAH: '1-1200',  // ASET: Akun untuk Piutang Murabahah.
+    PENDAPATAN_MARGIN: '4-1000',   // PENDAPATAN: Akun untuk Pendapatan Margin Murabahah.
 };
 
 
@@ -31,25 +33,26 @@ const MonthlyProcess: React.FC = () => {
         await runTransaction(db, async (transaction) => {
             // --- TAHAP 1: BACA SEMUA DATA YANG DIPERLUKAN SEBELUM MENULIS ---
             const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
-            const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", StatusKontrak.BERJALAN));
+            const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
             
             const anggotaSnapshot = await transaction.get(anggotaQuery);
             const kontrakSnapshot = await transaction.get(kontrakQuery);
             
-            const anggotaAktif = anggotaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anggota));
-            const kontrakBerjalan = kontrakSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KontrakMurabahah));
+            const anggotaAktif = anggotaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Anggota));
+            const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
             const kontrakMap = new Map<string, KontrakMurabahah>(kontrakBerjalan.map(k => [k.anggota_id, k]));
 
-            // Ambil semua data akun yang relevan dalam satu kali baca
+            // --- PERBAIKAN: Baca semua akun dalam satu operasi besar, lalu filter di memori ---
+            const allAccountsSnap = await transaction.get(collection(db, "chart_of_accounts"));
+            const allAccounts = allAccountsSnap.docs.map(d => ({id: d.id, ...d.data()}) as Akun);
+            
             const akunMap = new Map<string, Akun>();
             for (const kode of Object.values(KODE_AKUN_AUTODEBET)) {
-                const akunQuery = query(collection(db, "chart_of_accounts"), where("kode", "==", kode), limit(1));
-                const akunSnap = await transaction.get(akunQuery);
-                if (akunSnap.empty) {
+                const foundAccount = allAccounts.find(acc => acc.kode === kode);
+                if (!foundAccount) {
                     throw new Error(`Akun dengan kode ${kode} tidak ditemukan di Bagan Akun. Proses dibatalkan.`);
                 }
-                const akun = { id: akunSnap.docs[0].id, ...akunSnap.docs[0].data() } as Akun;
-                akunMap.set(akun.kode, akun);
+                akunMap.set(kode, foundAccount);
             }
 
             // --- TAHAP 2: PROSES DATA & AKUMULASI TOTAL DI MEMORI ---
@@ -60,8 +63,6 @@ const MonthlyProcess: React.FC = () => {
             let totalSimpananWajib = 0;
             let totalCicilanPokok = 0;
             let totalCicilanMargin = 0;
-
-            const updates = []; // Kumpulan data untuk di-update nanti
 
             for (const anggota of anggotaAktif) {
                 const simpananWajib = 50000; // Sebaiknya diambil dari settings
@@ -87,7 +88,7 @@ const MonthlyProcess: React.FC = () => {
                 });
             }
 
-            // --- TAHAP 3: PERSIAPKAN DAN JALANKAN SEMUA OPERASI TULIS (WRITE) ---
+            // --- TAHAP 3: JALANKAN SEMUA OPERASI TULIS (WRITE) ---
             
             // 3a. Update data anggota dan kontrak
             for (const anggota of anggotaAktif) {
@@ -178,5 +179,6 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
+
 
 
