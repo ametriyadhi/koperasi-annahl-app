@@ -1,12 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { LaporanArsip, Akun } from '../types';
-import { AkunTipe } from '../types';
+import type { Akun } from '../types';
 import Card from './shared/Card';
 
+// Definisikan tipe LaporanArsip di sini
+interface LaporanArsip {
+  id: string;
+  namaLaporan: string;
+  tanggalDibuat: string;
+  // Tipe data diubah agar sesuai dengan yang disimpan (string CSV atau array)
+  dataLaporan: any; 
+}
+
 const formatCurrency = (value: number) => {
-    // Menampilkan nilai absolut untuk laporan, menangani nilai NaN atau undefined
     const numValue = value || 0;
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Math.abs(numValue));
 };
@@ -43,16 +50,12 @@ const Reports: React.FC = () => {
     }, []);
 
     const financialReports = useMemo(() => {
-        // Pengaman jika data akun belum ada
-        if (accounts.length === 0) {
-            return {
-                asetItems: [], liabilitasItems: [], ekuitasItems: [], pendapatanItems: [], bebanItems: [],
-                totalAset: 0, totalLiabilitas: 0, totalEkuitas: 0, totalPendapatan: 0, totalBeban: 0, labaRugi: 0
-            };
-        }
+        if (accounts.length === 0) return {
+            asetItems: [], liabilitasItems: [], ekuitasItems: [], pendapatanItems: [], bebanItems: [],
+            totalAset: 0, totalLiabilitas: 0, totalEkuitas: 0, totalPendapatan: 0, totalBeban: 0, labaRugi: 0
+        };
 
         const accountMap = new Map(accounts.map(acc => [acc.kode, { ...acc, children: [] as Akun[] }]));
-
         for (const account of accounts) {
             if (account.parent_kode && accountMap.has(account.parent_kode)) {
                 accountMap.get(account.parent_kode)?.children.push(account);
@@ -60,24 +63,15 @@ const Reports: React.FC = () => {
         }
 
         const calculateTotal = (account?: Akun): number => {
-            if (!account) {
-                return 0;
-            }
-            // Jika tidak punya anak, kembalikan saldo sendiri
-            if (!account.children || account.children.length === 0) {
-                return account.saldo || 0;
-            }
-            // Jika punya anak, jumlahkan saldo semua anak
-            let total = 0; // Saldo akun induk tidak dihitung, hanya sebagai kategori
-            for (const child of account.children) {
-                total += calculateTotal(child);
-            }
+            if (!account) return 0;
+            if (!account.children || account.children.length === 0) return account.saldo || 0;
+            let total = 0;
+            for (const child of account.children) total += calculateTotal(child);
             return total;
         };
         
         const renderReportSection = (rootAccountKode: string, indentLevel = 0): JSX.Element[] => {
             const children = accounts.filter(a => a.parent_kode === rootAccountKode).sort((a,b) => a.kode.localeCompare(b.kode));
-            
             return children.flatMap(child => [
                 <ReportRow key={child.kode} label={child.nama} value={child.saldo} indentLevel={indentLevel + 1} />,
                 ...renderReportSection(child.kode, indentLevel + 1)
@@ -97,26 +91,30 @@ const Reports: React.FC = () => {
             ekuitasItems: renderReportSection('3-0000'),
             pendapatanItems: renderReportSection('4-0000'),
             bebanItems: renderReportSection('5-0000'),
-            totalAset,
-            totalLiabilitas,
-            totalEkuitas,
-            totalPendapatan,
-            totalBeban,
-            labaRugi
+            totalAset, totalLiabilitas, totalEkuitas, totalPendapatan, totalBeban, labaRugi
         };
-
     }, [accounts]);
 
-
+    // --- FUNGSI exportToCsv DIKEMBALIKAN ---
     const exportToCsv = (laporan: LaporanArsip) => {
-        const headers = ['NIP', 'Nama Anggota', 'Simpanan Wajib', 'Cicilan Murabahah', 'Total Potongan'];
-        const csvRows = [
-            headers.join(','),
-            ...laporan.dataLaporan.map(row => 
+        // Cek apakah dataLaporan adalah string (dari proses baru) atau array (dari proses lama)
+        let csvContent = '';
+        if (typeof laporan.dataLaporan === 'string') {
+            csvContent = laporan.dataLaporan;
+        } else if (Array.isArray(laporan.dataLaporan)) {
+            // Logika fallback jika data masih dalam format array lama
+            const headers = ['NIP', 'Nama Anggota', 'Simpanan Wajib', 'Cicilan Murabahah', 'Total Potongan'];
+            const csvRows = laporan.dataLaporan.map(row => 
                 [row.nip, `"${row.nama}"`, row.simpananWajib, row.cicilanMurabahah, row.totalPotongan].join(',')
-            )
-        ];
-        const csvContent = csvRows.join('\n');
+            );
+            csvContent = [headers.join(','), ...csvRows].join('\n');
+        }
+
+        if (!csvContent) {
+            alert("Format data laporan tidak dikenali.");
+            return;
+        }
+
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -147,6 +145,7 @@ const Reports: React.FC = () => {
                                                 Dibuat pada: {new Date(arsip.tanggalDibuat).toLocaleString('id-ID')}
                                             </p>
                                         </div>
+                                        {/* Tombol ini sekarang memanggil fungsi 'exportToCsv' yang sudah dikembalikan */}
                                         <button onClick={() => exportToCsv(arsip)} className="text-sm font-medium text-primary hover:underline">
                                             Unduh CSV
                                         </button>
@@ -201,6 +200,7 @@ const Reports: React.FC = () => {
 };
 
 export default Reports;
+
 
 
 
