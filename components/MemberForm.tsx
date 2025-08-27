@@ -4,7 +4,8 @@ import type { Anggota, UserProfile } from '../types';
 import { Unit } from '../types';
 
 interface MemberFormProps {
-  onSave: (anggota: Omit<Anggota, 'id'>, authInfo: { uid?: string, email?: string, password?: string }) => void;
+  // onSave sekarang hanya mengirim data anggota
+  onSave: (anggota: Omit<Anggota, 'id'>) => void;
   onClose: () => void;
   initialData?: Anggota | null;
   userProfile?: UserProfile | null;
@@ -25,35 +26,16 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
     ...initialData,
   });
 
-  const [authInfo, setAuthInfo] = useState({
-    email: userProfile?.email || '',
-    password: '', // Password selalu kosong di awal untuk keamanan
-  });
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     const isNumber = ['simpanan_pokok', 'simpanan_wajib', 'simpanan_sukarela'].includes(name);
     setFormData(prev => ({ ...prev, [name]: isNumber ? Number(value) : value }));
   };
 
-  const handleAuthChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setAuthInfo(prev => ({ ...prev, [name]: value }));
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const { id, ...dataToSave } = formData;
-    
-    // Siapkan data auth untuk dikirim
-    const authPayload = {
-        uid: userProfile?.uid,
-        email: authInfo.email,
-        // Hanya kirim password jika diisi
-        ...(authInfo.password && { password: authInfo.password })
-    };
-
-    onSave(dataToSave as Omit<Anggota, 'id'>, authPayload);
+    onSave(dataToSave as Omit<Anggota, 'id'>);
   };
 
   return (
@@ -95,17 +77,13 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
         </div>
       </div>
       
+      {/* Bagian data login sekarang hanya untuk informasi */}
       <div className="pt-4 mt-4 border-t">
           <h4 className="text-md font-semibold text-gray-800 mb-2">Data Login</h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <div>
-                  <label className="block text-sm font-medium text-gray-700">Email Login</label>
-                  <input type="email" name="email" value={authInfo.email} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
-              </div>
-              <div>
-                  <label className="block text-sm font-medium text-gray-700">Password Baru (Opsional)</label>
-                  <input type="password" name="password" value={authInfo.password} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" minLength={6} placeholder="Isi untuk mengubah" />
-              </div>
+          <p className="text-xs text-gray-500 mb-2">Perubahan email & password harus dilakukan manual di Firebase Console untuk alasan keamanan.</p>
+          <div>
+              <label className="block text-sm font-medium text-gray-700">Email Login</label>
+              <input type="email" value={userProfile?.email || 'Belum terdaftar'} readOnly className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 bg-gray-100" />
           </div>
       </div>
 
@@ -122,6 +100,7 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
 };
 
 export default MemberForm;
+
 
 
 
