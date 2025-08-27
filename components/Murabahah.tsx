@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
-import { StatusKontrak } from '../types';
+import { StatusKontrak, Unit } from '../types'; // Impor Unit
 import Card from './shared/Card';
 import Modal from './shared/Modal';
 import MurabahahForm from './MurabahahForm';
 import MurabahahImporter from './MurabahahImporter';
 import { PlusCircleIcon } from './icons';
 
+// Fungsi helper untuk format mata uang
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 };
@@ -19,6 +20,7 @@ const tabs = [
 ];
 
 const Murabahah: React.FC = () => {
+    // State yang sudah ada
     const [anggotaList, setAnggotaList] = useState<Anggota[]>([]);
     const [kontrakList, setKontrakList] = useState<KontrakMurabahah[]>([]);
     const [loading, setLoading] = useState(true);
@@ -26,6 +28,10 @@ const Murabahah: React.FC = () => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingKontrak, setEditingKontrak] = useState<KontrakMurabahah | null>(null);
+
+    // --- STATE BARU UNTUK FILTER DAN PENCARIAN ---
+    const [searchTerm, setSearchTerm] = useState('');
+    const [unitFilter, setUnitFilter] = useState('Semua');
 
     useEffect(() => {
         const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
@@ -63,27 +69,70 @@ const Murabahah: React.FC = () => {
     };
 
     const handleDeleteKontrak = async (id: string) => {
-        if (confirm("Apakah Anda yakin ingin menghapus kontrak ini?")) {
+        if (window.confirm("Apakah Anda yakin ingin menghapus kontrak ini?")) {
             try {
                 await deleteDoc(doc(db, "kontrak_murabahah", id));
             } catch (error) { console.error("Error deleting contract: ", error); }
         }
     };
 
-    const filteredContracts = kontrakList.filter(k => k.status === activeTab);
     const getAnggotaInfo = (anggotaId: string) => anggotaList.find(a => a.id === anggotaId);
+
+    // --- LOGIKA BARU UNTUK MEMFILTER DATA ---
+    const filteredContracts = useMemo(() => {
+        const anggotaMap = new Map(anggotaList.map(a => [a.id, a]));
+        
+        return kontrakList.filter(kontrak => {
+            const anggota = anggotaMap.get(kontrak.anggota_id);
+            if (!anggota) return false;
+
+            const statusMatch = kontrak.status === activeTab;
+            const unitMatch = unitFilter === 'Semua' || anggota.unit === unitFilter;
+            const searchMatch = searchTerm === '' || 
+                                anggota.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                kontrak.nama_barang.toLowerCase().includes(searchTerm.toLowerCase());
+
+            return statusMatch && unitMatch && searchMatch;
+        });
+    }, [kontrakList, anggotaList, activeTab, unitFilter, searchTerm]);
+
+    // --- LOGIKA BARU UNTUK MENGHITUNG TOTAL ---
+    const totalPembiayaanFiltered = useMemo(() => {
+        return filteredContracts.reduce((total, kontrak) => total + (kontrak.harga_jual || 0), 0);
+    }, [filteredContracts]);
+
 
     return (
         <>
             <Card>
-                <div className="flex justify-between items-center p-4 sm:p-6 border-b">
-                    <h3 className="text-lg font-semibold text-gray-800">Pembiayaan Murabahah</h3>
-                    <div className="flex space-x-2">
-                        <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">Import CSV</button>
-                        <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
-                            <PlusCircleIcon className="w-5 h-5 mr-2" />
-                            Tambah Pengajuan
-                        </button>
+                <div className="p-4 sm:p-6 border-b">
+                    <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-semibold text-gray-800">Pembiayaan Murabahah</h3>
+                        <div className="flex space-x-2">
+                            <button onClick={() => setIsImportModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">Import CSV</button>
+                            <button onClick={() => handleOpenFormModal()} className="flex items-center px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">
+                                <PlusCircleIcon className="w-5 h-5 mr-2" />
+                                Tambah Pengajuan
+                            </button>
+                        </div>
+                    </div>
+                    {/* --- FORM FILTER DAN PENCARIAN BARU --- */}
+                    <div className="mt-4 flex flex-col md:flex-row space-y-2 md:space-y-0 md:space-x-4">
+                        <input 
+                            type="text"
+                            placeholder="Cari nama anggota/barang..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full md:w-1/3 border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                        />
+                        <select
+                            value={unitFilter}
+                            onChange={(e) => setUnitFilter(e.target.value)}
+                            className="w-full md:w-1/3 border border-gray-300 rounded-md shadow-sm py-2 px-3"
+                        >
+                            <option value="Semua">Semua Unit</option>
+                            {Object.values(Unit).map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
                     </div>
                 </div>
                 <div className="border-b border-gray-200 px-4 sm:px-6">
@@ -107,10 +156,8 @@ const Murabahah: React.FC = () => {
                                     <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Tenor</th>
                                     <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Hrg Pokok</th>
                                     <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Margin</th>
-                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">DP</th>
-                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angs. Pokok</th>
-                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angs. Margin</th>
-                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Total Angsuran</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Total Pembiayaan</th>
+                                    <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angsuran</th>
                                     <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Terbayar</th>
                                     <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Sisa Cicilan</th>
                                     <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Aksi</th>
@@ -119,11 +166,7 @@ const Murabahah: React.FC = () => {
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {filteredContracts.map((kontrak) => {
                                     const anggota = getAnggotaInfo(kontrak.anggota_id);
-                                    const pokokSetelahDP = (kontrak.harga_pokok || 0) - (kontrak.uang_muka || 0);
-                                    const angsuranPokok = pokokSetelahDP / (kontrak.tenor || 1);
-                                    const angsuranMargin = (kontrak.margin || 0) / (kontrak.tenor || 1);
-                                    const hutangSetelahDP = (kontrak.harga_jual || 0) - (kontrak.uang_muka || 0);
-                                    const sisaHutang = Math.max(0, hutangSetelahDP - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
+                                    const sisaHutang = Math.max(0, (kontrak.harga_jual || 0) - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
                                     
                                     return (
                                         <tr key={kontrak.id} className="hover:bg-gray-50">
@@ -134,11 +177,9 @@ const Murabahah: React.FC = () => {
                                             <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.tenor}</td>
                                             <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.harga_pokok)}</td>
                                             <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.margin)}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.uang_muka)}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(angsuranPokok)}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(angsuranMargin)}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
-                                            <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.harga_jual)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-right text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
+                                            <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar} / {kontrak.tenor}</td>
                                             <td className="px-4 py-2 whitespace-nowrap text-right font-bold text-gray-800">{formatCurrency(sisaHutang)}</td>
                                             <td className="px-4 py-2 whitespace-nowrap text-center font-medium space-x-2">
                                                 <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
@@ -148,11 +189,19 @@ const Murabahah: React.FC = () => {
                                     );
                                 })}
                             </tbody>
+                            {/* --- FOOTER BARU UNTUK TOTAL --- */}
+                            <tfoot className="bg-gray-50 border-t-2">
+                                <tr>
+                                    <td colSpan={7} className="px-4 py-3 text-right font-bold text-gray-700">Total Pembiayaan (Hasil Filter)</td>
+                                    <td className="px-4 py-3 text-right font-bold text-gray-900">{formatCurrency(totalPembiayaanFiltered)}</td>
+                                    <td colSpan={4}></td>
+                                </tr>
+                            </tfoot>
                         </table>
                     )}
                      {!loading && filteredContracts.length === 0 && (
                         <div className="text-center py-10 text-gray-500">
-                            Tidak ada data untuk status "{activeTab}".
+                            Tidak ada data untuk filter yang dipilih.
                         </div>
                     )}
                 </div>
@@ -168,4 +217,5 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
