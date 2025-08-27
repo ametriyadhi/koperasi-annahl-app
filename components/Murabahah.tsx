@@ -98,10 +98,20 @@ const Murabahah: React.FC = () => {
 
     const handleExportCsv = () => {
         const headers = ['Nama Anggota', 'Unit', 'Nama Barang', 'Tgl Realisasi', 'Tenor', 'Harga Pokok', 'Margin', 'Total Pembiayaan', 'Angsuran/Bln', 'Terbayar', 'Sisa Hutang'];
+        // --- PERBAIKAN: Pembulatan angka ditambahkan di sini ---
         const csvRows = sortedAndFilteredContracts.map(k => 
             [
-                `"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`, new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
-                k.tenor, k.harga_pokok, k.margin, k.harga_jual, k.cicilan_per_bulan, k.cicilan_terbayar, k.sisaHutang
+                `"${k.anggotaNama}"`, 
+                k.anggotaUnit, 
+                `"${k.nama_barang}"`, 
+                new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
+                k.tenor, 
+                Math.round(k.harga_pokok), 
+                Math.round(k.margin), 
+                Math.round(k.harga_jual), 
+                Math.round(k.cicilan_per_bulan), 
+                k.cicilan_terbayar, 
+                Math.round(k.sisaHutang)
             ].join(',')
         );
         const csvContent = [headers.join(','), ...csvRows].join('\n');
@@ -114,7 +124,6 @@ const Murabahah: React.FC = () => {
         document.body.removeChild(link);
     };
 
-    // ... (sisa fungsi seperti handleOpenFormModal, handleSaveKontrak, dll tidak berubah)
     const handleOpenFormModal = (kontrak: KontrakMurabahah | null = null) => {
         setEditingKontrak(kontrak);
         setIsFormModalOpen(true);
@@ -219,5 +228,6 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
 
