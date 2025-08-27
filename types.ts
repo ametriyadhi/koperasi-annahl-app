@@ -28,9 +28,17 @@ export enum AkunTipe {
   ASET = 'Aset', LIABILITAS = 'Liabilitas', EKUITAS = 'Ekuitas', PENDAPATAN = 'Pendapatan', BEBAN = 'Beban',
 }
 
+// Menambahkan tipe baru untuk Saldo Normal
+export type SaldoNormal = 'Debit' | 'Kredit';
+
 export interface Akun {
   id: string;
-  kode: string; nama: string; tipe: AkunTipe; parent_kode?: string; saldo: number;
+  kode: string;
+  nama: string;
+  tipe: AkunTipe;
+  saldo_normal: SaldoNormal; // Properti baru untuk menyimpan posisi saldo normal
+  parent_kode?: string;
+  saldo: number;
 }
 
 export interface ReportRow {
