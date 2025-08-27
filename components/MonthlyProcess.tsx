@@ -28,26 +28,25 @@ const MonthlyProcess: React.FC = () => {
 
     setIsProcessing(true);
     try {
-      // Variabel untuk menyimpan total yang akan dijumlahkan
-      let grandTotalSimpanan = 0;
-      let grandTotalPokok = 0;
-      let grandTotalMargin = 0;
-      let reportData: AutodebetReportRow[] = [];
+      // Variabel untuk menyimpan hasil kalkulasi sebelum ditulis ke CSV
+      let csvContent = ''; 
 
       await runTransaction(db, async (transaction) => {
-        // --- TAHAP 1: BACA SEMUA DATA ---
+        // ====================================================================
+        // TAHAP 1: BACA SEMUA DATA DARI FIRESTORE (READ PHASE)
+        // ====================================================================
         const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
         const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
         
-        const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
-            transaction.get(anggotaQuery),
-            transaction.get(kontrakQuery)
-        ]);
+        const anggotaSnapshot = await transaction.get(anggotaQuery);
+        const kontrakSnapshot = await transaction.get(kontrakQuery);
         
         const anggotaAktif = anggotaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Anggota));
         const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
 
-        // Kelompokkan kontrak berdasarkan anggota_id
+        // ====================================================================
+        // TAHAP 2: PROSES SEMUA DATA DI MEMORI (PROCESS PHASE)
+        // ====================================================================
         const kontrakByAnggota = new Map<string, KontrakMurabahah[]>();
         kontrakBerjalan.forEach(k => {
             const list = kontrakByAnggota.get(k.anggota_id) || [];
@@ -55,11 +54,18 @@ const MonthlyProcess: React.FC = () => {
             kontrakByAnggota.set(k.anggota_id, list);
         });
 
-        // --- TAHAP 2: PROSES & PERSIAPKAN DATA UNTUK CSV ---
         const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
-        
-        // Urutkan anggota berdasarkan unit
-        anggotaAktif.sort((a, b) => unitOrder.indexOf(a.unit) - unitOrder.indexOf(b.unit));
+        anggotaAktif.sort((a, b) => {
+            const orderA = unitOrder.indexOf(a.unit);
+            const orderB = unitOrder.indexOf(b.unit);
+            if (orderA !== orderB) return orderA - orderB;
+            return a.nama.localeCompare(b.nama);
+        });
+
+        let reportData: AutodebetReportRow[] = [];
+        let grandTotalSimpanan = 0;
+        let grandTotalPokok = 0;
+        let grandTotalMargin = 0;
 
         for (const anggota of anggotaAktif) {
             const simpananWajib = settings.simpanan_wajib || 50000;
@@ -77,8 +83,7 @@ const MonthlyProcess: React.FC = () => {
                     grandTotalMargin += cicilanMargin;
                     
                     reportData.push({
-                        // Nama, unit, dan simpanan hanya di baris pertama jika ada banyak cicilan
-                        nama: index === 0 ? anggota.nama : '',
+                        nama: index === 0 ? anggota.nama : `    ↳ ${kontrak.nama_barang}`,
                         unit: index === 0 ? anggota.unit : '',
                         simpananWajib: index === 0 ? simpananWajib : '',
                         angsuranKe,
@@ -88,7 +93,6 @@ const MonthlyProcess: React.FC = () => {
                     });
                 });
             } else {
-                // Anggota yang hanya bayar simpanan wajib
                 reportData.push({
                     nama: anggota.nama,
                     unit: anggota.unit,
@@ -99,13 +103,31 @@ const MonthlyProcess: React.FC = () => {
                     total: simpananWajib,
                 });
             }
+        }
+        
+        // --- Menyiapkan konten CSV di akhir tahap proses ---
+        const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
+        const csvRows = reportData.map(row => 
+          [
+            `"${row.nama}"`, row.unit, row.simpananWajib, row.angsuranKe,
+            Math.round(row.cicilanPokok), Math.round(row.cicilanMargin), Math.round(row.total)
+          ].join(',')
+        );
+        const totalRow = [
+            '"TOTAL"', '', Math.round(grandTotalSimpanan), '', Math.round(grandTotalPokok), 
+            Math.round(grandTotalMargin), Math.round(grandTotalSimpanan + grandTotalPokok + grandTotalMargin)
+        ].join(',');
+        csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
 
-            // --- TAHAP 3: PERSIAPKAN OPERASI TULIS (WRITE) ---
-            // Update simpanan wajib anggota
+
+        // ====================================================================
+        // TAHAP 3: TULIS SEMUA PERUBAHAN KE FIRESTORE (WRITE PHASE)
+        // ====================================================================
+        for (const anggota of anggotaAktif) {
             const anggotaRef = doc(db, "anggota", anggota.id);
-            transaction.update(anggotaRef, { simpanan_wajib: (anggota.simpanan_wajib || 0) + simpananWajib });
+            transaction.update(anggotaRef, { simpanan_wajib: (anggota.simpanan_wajib || 0) + (settings.simpanan_wajib || 50000) });
 
-            // Update setiap kontrak yang dimiliki anggota
+            const kontrakAnggota = kontrakByAnggota.get(anggota.id) || [];
             for (const kontrak of kontrakAnggota) {
                 const kontrakRef = doc(db, "kontrak_murabahah", kontrak.id);
                 const cicilanTerbayarBaru = (kontrak.cicilan_terbayar || 0) + 1;
@@ -115,31 +137,7 @@ const MonthlyProcess: React.FC = () => {
         }
       });
 
-      // --- TAHAP 4: BUAT DAN UNDUH FILE CSV ---
-      const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
-      const csvRows = reportData.map(row => 
-        [
-          `"${row.nama}"`,
-          row.unit,
-          row.simpananWajib,
-          row.angsuranKe,
-          Math.round(row.cicilanPokok),
-          Math.round(row.cicilanMargin),
-          Math.round(row.total)
-        ].join(',')
-      );
-      
-      // Tambahkan baris total di akhir
-      const totalRow = [
-          '"TOTAL"', '', 
-          Math.round(grandTotalSimpanan), '', 
-          Math.round(grandTotalPokok), 
-          Math.round(grandTotalMargin), 
-          Math.round(grandTotalSimpanan + grandTotalPokok + grandTotalMargin)
-      ].join(',');
-
-      const csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
-
+      // --- Setelah transaksi sukses, trigger download CSV ---
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -190,6 +188,7 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
+
 
 
 
