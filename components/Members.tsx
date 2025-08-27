@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, updateDoc, deleteDoc, doc } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
+import { collection, onSnapshot, updateDoc, deleteDoc, doc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, UserProfile } from '../types';
 import { Unit } from '../types';
@@ -14,7 +13,6 @@ const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
 }
 
-// Tipe untuk konfigurasi pengurutan
 type SortConfig = {
   key: keyof Anggota | 'totalSimpanan';
   direction: 'ascending' | 'descending';
@@ -49,26 +47,22 @@ const Members: React.FC = () => {
         totalSimpanan: (a.simpanan_pokok || 0) + (a.simpanan_wajib || 0) + (a.simpanan_sukarela || 0)
     }));
 
-    // Filtering
-    filterableAnggota = filterableAnggota.filter(anggota => {
-      const searchMatch = anggota.nama.toLowerCase().includes(searchTerm.toLowerCase()) || anggota.nip.includes(searchTerm);
-      const unitMatch = unitFilter === 'Semua' || anggota.unit === unitFilter;
-      return searchMatch && unitMatch;
-    });
+    if (searchTerm) {
+        filterableAnggota = filterableAnggota.filter(anggota =>
+            anggota.nama.toLowerCase().includes(searchTerm.toLowerCase()) || anggota.nip.includes(searchTerm)
+        );
+    }
+    if (unitFilter !== 'Semua') {
+        filterableAnggota = filterableAnggota.filter(anggota => anggota.unit === unitFilter);
+    }
 
-    // Sorting
     if (sortConfig !== null) {
       filterableAnggota.sort((a, b) => {
-        if (a[sortConfig.key] < b[sortConfig.key]) {
-          return sortConfig.direction === 'ascending' ? -1 : 1;
-        }
-        if (a[sortConfig.key] > b[sortConfig.key]) {
-          return sortConfig.direction === 'ascending' ? 1 : -1;
-        }
+        if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
         return 0;
       });
     } else {
-      // Default sort by unit then name
       const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
       filterableAnggota.sort((a, b) => {
         const unitComparison = unitOrder.indexOf(a.unit) - unitOrder.indexOf(b.unit);
@@ -100,41 +94,28 @@ const Members: React.FC = () => {
   
   const handleCloseImportModal = () => setIsImportModalOpen(false);
 
-  const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>, authInfo: { uid?: string, email?: string, password?: string }) => {
-    if (!editingAnggota || !authInfo.uid) {
-        alert("Error: Data anggota atau UID tidak ditemukan untuk proses update.");
-        return;
-    }
-    
-    setIsLoading(true);
+  // --- FUNGSI PENYIMPANAN DIPERBAIKI ---
+  const handleSaveAnggota = async (anggotaData: Omit<Anggota, 'id'>) => {
     try {
-        // 1. Update data anggota di Firestore
+      if (editingAnggota) {
+        // Mode Edit: Hanya update data anggota di Firestore
         const anggotaRef = doc(db, "anggota", editingAnggota.id);
         await updateDoc(anggotaRef, anggotaData);
-
-        // 2. Panggil Cloud Function untuk update data Auth & user profile
-        const functions = getFunctions();
-        const updateUserAuth = httpsCallable(functions, 'updateUserAuth');
-        await updateUserAuth({ 
-            uid: authInfo.uid, 
-            email: authInfo.email, 
-            password: authInfo.password, // Kirim password jika ada, jika tidak, undefined
-            displayName: anggotaData.nama,
-        });
-
-        alert("Data anggota dan login berhasil diperbarui.");
-        handleCloseFormModal();
+        alert("Data anggota berhasil diperbarui.");
+      } else {
+        // Mode Tambah: Buat anggota baru dan berikan instruksi manual
+        const newAnggotaDoc = await addDoc(collection(db, "anggota"), anggotaData);
+        alert(`Anggota baru berhasil ditambahkan.\n\nPENTING: Daftarkan akun login untuk anggota ini secara manual di Firebase Authentication.`);
+      }
+      handleCloseFormModal();
     } catch (error: any) {
-        console.error("Error saving member: ", error);
-        alert(`Terjadi kesalahan: ${error.message}`);
-    } finally {
-        setIsLoading(false);
+      console.error("Error saving member: ", error);
+      alert(`Terjadi kesalahan: ${error.message}`);
     }
   };
 
   const handleDeleteAnggota = async (id: string) => {
     if (window.confirm("Menghapus anggota juga akan menghapus data login mereka. Aksi ini tidak dapat diurungkan. Lanjutkan?")) {
-      // Di aplikasi production, sebaiknya panggil Cloud Function untuk menghapus user dari Auth
       try {
         await deleteDoc(doc(db, "anggota", id));
         alert("Anggota berhasil dihapus. Harap hapus user terkait dari Firebase Authentication secara manual.");
@@ -208,7 +189,6 @@ const Members: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                {/* Header Tabel yang bisa diklik */}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   <button onClick={() => requestSort('nama')} className="flex items-center">Nama <ArrowDownUpIcon className="w-4 h-4 ml-1" /></button>
                 </th>
@@ -244,7 +224,7 @@ const Members: React.FC = () => {
         </div>
       </Card>
 
-      <Modal isOpen={isFormModalOpen} onClose={handleCloseFormModal} title={editingAnggota ? 'Edit Anggota' : 'Tambah Anggota Baru'}>
+      <Modal isOpen={isFormModalOpen} onClose={handleCloseFormModal} title={editingAnggota ? `Edit Anggota - ${editingAnggota.nama}` : 'Tambah Anggota Baru'}>
         <MemberForm 
           onSave={handleSaveAnggota}
           onClose={handleCloseFormModal}
@@ -261,6 +241,7 @@ const Members: React.FC = () => {
 };
 
 export default Members;
+
 
 
 
