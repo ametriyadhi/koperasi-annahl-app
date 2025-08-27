@@ -1,13 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSettings } from './SettingsContext';
 import type { Anggota, UserProfile } from '../types';
 import { Unit } from '../types';
 
 interface MemberFormProps {
-  onSave: (anggota: Omit<Anggota, 'id'>, authInfo: { email?: string, password?: string }) => void;
+  onSave: (anggota: Omit<Anggota, 'id'>, authInfo: { uid?: string, email?: string, password?: string }) => void;
   onClose: () => void;
   initialData?: Anggota | null;
-  userProfile?: UserProfile | null; // Prop untuk memeriksa apakah anggota sudah punya akun
+  userProfile?: UserProfile | null;
 }
 
 const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, userProfile }) => {
@@ -26,13 +26,9 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
   });
 
   const [authInfo, setAuthInfo] = useState({
-    email: '',
-    password: '',
+    email: userProfile?.email || '',
+    password: '', // Password selalu kosong di awal untuk keamanan
   });
-
-  // Tampilkan form auth jika sedang menambah anggota baru, ATAU
-  // jika sedang mengedit anggota yang belum punya profil pengguna.
-  const showAuthFields = !initialData || (initialData && !userProfile);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -48,11 +44,21 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const { id, ...dataToSave } = formData;
-    onSave(dataToSave as Omit<Anggota, 'id'>, showAuthFields ? authInfo : {});
+    
+    // Siapkan data auth untuk dikirim
+    const authPayload = {
+        uid: userProfile?.uid,
+        email: authInfo.email,
+        // Hanya kirim password jika diisi
+        ...(authInfo.password && { password: authInfo.password })
+    };
+
+    onSave(dataToSave as Omit<Anggota, 'id'>, authPayload);
   };
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <h4 className="text-md font-semibold text-gray-800">Data Keanggotaan</h4>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">Nama Lengkap</label>
@@ -75,32 +81,40 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
             <option value="Tidak Aktif">Tidak Aktif</option>
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">Simpanan Pokok (Rp)</label>
+          <input type="number" name="simpanan_pokok" value={formData.simpanan_pokok} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" />
+        </div>
+         <div>
+          <label className="block text-sm font-medium text-gray-700">Simpanan Wajib (Rp)</label>
+          <input type="number" name="simpanan_wajib" value={formData.simpanan_wajib} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" />
+        </div>
+         <div>
+          <label className="block text-sm font-medium text-gray-700">Simpanan Sukarela (Rp)</label>
+          <input type="number" name="simpanan_sukarela" value={formData.simpanan_sukarela} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" />
+        </div>
       </div>
       
-      {showAuthFields && (
-        <div className="pt-4 mt-4 border-t">
-            <h4 className="text-md font-semibold text-gray-800 mb-2">Buat Akun Login untuk Anggota</h4>
-            {!initialData && <p className="text-sm text-gray-600 mb-2">Isi form di bawah untuk mendaftarkan akun portal anggota baru.</p>}
-            {initialData && !userProfile && <p className="text-sm text-gray-600 mb-2">Anggota ini belum memiliki akses portal. Isi form di bawah untuk mendaftarkannya.</p>}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-sm font-medium text-gray-700">Email Login</label>
-                    <input type="email" name="email" value={authInfo.email} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700">Password</label>
-                    <input type="password" name="password" value={authInfo.password} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required minLength={6} />
-                </div>
-            </div>
-        </div>
-      )}
+      <div className="pt-4 mt-4 border-t">
+          <h4 className="text-md font-semibold text-gray-800 mb-2">Data Login</h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               <div>
+                  <label className="block text-sm font-medium text-gray-700">Email Login</label>
+                  <input type="email" name="email" value={authInfo.email} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" required />
+              </div>
+              <div>
+                  <label className="block text-sm font-medium text-gray-700">Password Baru (Opsional)</label>
+                  <input type="password" name="password" value={authInfo.password} onChange={handleAuthChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3" minLength={6} placeholder="Isi untuk mengubah" />
+              </div>
+          </div>
+      </div>
 
       <div className="flex justify-end space-x-3 pt-4 border-t">
         <button type="button" onClick={onClose} className="px-4 py-2 bg-white border border-gray-300 text-sm font-medium rounded-md hover:bg-gray-50">
           Batal
         </button>
         <button type="submit" className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-amber-500">
-          Simpan
+          Simpan Perubahan
         </button>
       </div>
     </form>
@@ -108,5 +122,6 @@ const MemberForm: React.FC<MemberFormProps> = ({ onSave, onClose, initialData, u
 };
 
 export default MemberForm;
+
 
 
