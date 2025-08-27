@@ -6,7 +6,9 @@ import { AkunTipe } from '../types';
 import Card from './shared/Card';
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Math.abs(value));
+    // Menampilkan nilai absolut untuk laporan, menangani nilai NaN atau undefined
+    const numValue = value || 0;
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(Math.abs(numValue));
 };
 
 const ReportRow: React.FC<{ label: string, value: number, isTotal?: boolean, indentLevel?: number }> = ({ label, value, isTotal = false, indentLevel = 0 }) => (
@@ -19,18 +21,19 @@ const ReportRow: React.FC<{ label: string, value: number, isTotal?: boolean, ind
 const Reports: React.FC = () => {
     const [arsipList, setArsipList] = useState<LaporanArsip[]>([]);
     const [accounts, setAccounts] = useState<Akun[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState({ arsip: true, accounts: true });
 
     useEffect(() => {
         const unsubArsip = onSnapshot(collection(db, "laporan_arsip"), (snapshot) => {
             const archives = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LaporanArsip));
             archives.sort((a, b) => new Date(b.tanggalDibuat).getTime() - new Date(a.tanggalDibuat).getTime());
             setArsipList(archives);
+            setLoading(prev => ({ ...prev, arsip: false }));
         });
 
         const unsubAccounts = onSnapshot(collection(db, "chart_of_accounts"), (snapshot) => {
             setAccounts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Akun)));
-            setLoading(false);
+            setLoading(prev => ({ ...prev, accounts: false }));
         });
 
         return () => {
@@ -40,6 +43,7 @@ const Reports: React.FC = () => {
     }, []);
 
     const financialReports = useMemo(() => {
+        // Pengaman jika data akun belum ada
         if (accounts.length === 0) {
             return {
                 asetItems: [], liabilitasItems: [], ekuitasItems: [], pendapatanItems: [], bebanItems: [],
@@ -56,15 +60,15 @@ const Reports: React.FC = () => {
         }
 
         const calculateTotal = (account?: Akun): number => {
-            // --- PERBAIKAN: Tambahkan pengecekan jika akun tidak ada ---
             if (!account) {
                 return 0;
             }
-            // --- AKHIR PERBAIKAN ---
+            // Jika tidak punya anak, kembalikan saldo sendiri
             if (!account.children || account.children.length === 0) {
-                return account.saldo;
+                return account.saldo || 0;
             }
-            let total = account.saldo;
+            // Jika punya anak, jumlahkan saldo semua anak
+            let total = 0; // Saldo akun induk tidak dihitung, hanya sebagai kategori
             for (const child of account.children) {
                 total += calculateTotal(child);
             }
@@ -105,7 +109,23 @@ const Reports: React.FC = () => {
 
 
     const exportToCsv = (laporan: LaporanArsip) => {
-        // Fungsi ini tidak berubah
+        const headers = ['NIP', 'Nama Anggota', 'Simpanan Wajib', 'Cicilan Murabahah', 'Total Potongan'];
+        const csvRows = [
+            headers.join(','),
+            ...laporan.dataLaporan.map(row => 
+                [row.nip, `"${row.nama}"`, row.simpananWajib, row.cicilanMurabahah, row.totalPotongan].join(',')
+            )
+        ];
+        const csvContent = csvRows.join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const fileName = `${laporan.namaLaporan.replace(/ /g, '_')}.csv`;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
     
     return (
@@ -113,11 +133,33 @@ const Reports: React.FC = () => {
             <h2 className="text-3xl font-bold text-gray-800 mb-6">Laporan</h2>
             
             <Card title="Arsip Laporan Autodebet" className="mb-8">
-                {/* Bagian ini tidak berubah */}
+                <div className="p-6">
+                    {loading.arsip ? <p>Memuat arsip...</p> : (
+                        arsipList.length === 0 ? (
+                            <p className="text-sm text-gray-500">Belum ada laporan yang diarsipkan.</p>
+                        ) : (
+                            <ul className="divide-y divide-gray-200">
+                                {arsipList.map(arsip => (
+                                    <li key={arsip.id} className="py-3 flex justify-between items-center">
+                                        <div>
+                                            <p className="text-sm font-medium text-gray-900">{arsip.namaLaporan}</p>
+                                            <p className="text-xs text-gray-500">
+                                                Dibuat pada: {new Date(arsip.tanggalDibuat).toLocaleString('id-ID')}
+                                            </p>
+                                        </div>
+                                        <button onClick={() => exportToCsv(arsip)} className="text-sm font-medium text-primary hover:underline">
+                                            Unduh CSV
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )
+                    )}
+                </div>
             </Card>
 
             <h3 className="text-2xl font-bold text-gray-800 mb-4">Laporan Keuangan Real-time</h3>
-            {loading ? <p>Menghitung laporan keuangan...</p> : (
+            {loading.accounts ? <p>Menghitung laporan keuangan...</p> : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                     <Card title="Neraca (Balance Sheet)">
                         <div className="p-6 space-y-4">
@@ -159,5 +201,6 @@ const Reports: React.FC = () => {
 };
 
 export default Reports;
+
 
 
