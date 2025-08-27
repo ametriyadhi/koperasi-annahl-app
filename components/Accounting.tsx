@@ -178,21 +178,30 @@ const Accounting: React.FC = () => {
         }
     }, [handleCloseJournalModal]);
 
-
+    // --- PERBAIKAN: LOGIKA handleDeleteJurnal DIUBAH TOTAL ---
     const handleDeleteJurnal = useCallback(async (jurnalId: string) => {
          if (!window.confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
 
         try {
             await runTransaction(db, async (transaction) => {
+                // --- TAHAP 1: BACA SEMUA DATA ---
                 const jurnalRef = doc(db, "jurnal_umum", jurnalId);
                 const jurnalDoc = await transaction.get(jurnalRef);
-                if (!jurnalDoc.exists()) throw new Error("Jurnal tidak ditemukan!");
-
+                if (!jurnalDoc.exists()) {
+                    throw new Error("Jurnal tidak ditemukan!");
+                }
                 const jurnalData = jurnalDoc.data() as JurnalEntry;
 
-                for (const line of jurnalData.lines) {
-                    const accRef = doc(db, "chart_of_accounts", line.akun_id);
-                    const accDoc = await transaction.get(accRef);
+                // Ambil semua dokumen akun yang terlibat dalam satu kali jalan
+                const accountRefs = jurnalData.lines.map(line => doc(db, "chart_of_accounts", line.akun_id));
+                const accountDocs = await Promise.all(accountRefs.map(ref => transaction.get(ref)));
+                
+                // --- TAHAP 2: KALKULASI & PERSIAPAN TULIS ---
+                const updates: { ref: any, newSaldo: number }[] = [];
+                for (let i = 0; i < accountDocs.length; i++) {
+                    const accDoc = accountDocs[i];
+                    const line = jurnalData.lines[i];
+
                     if (accDoc.exists()) {
                         const accountData = accDoc.data() as Akun;
                         const currentSaldo = accountData.saldo || 0;
@@ -203,9 +212,14 @@ const Accounting: React.FC = () => {
                         } else { 
                             newSaldo = currentSaldo + line.debit - line.kredit;
                         }
-                        transaction.update(accRef, { saldo: newSaldo });
+                        updates.push({ ref: accDoc.ref, newSaldo });
                     }
                 }
+
+                // --- TAHAP 3: TULIS SEMUA PERUBAHAN ---
+                updates.forEach(update => {
+                    transaction.update(update.ref, { saldo: update.newSaldo });
+                });
                 transaction.delete(jurnalRef);
             });
             alert("Jurnal berhasil dihapus dan saldo telah dikembalikan.");
@@ -215,26 +229,21 @@ const Accounting: React.FC = () => {
         }
     }, []);
 
-    // --- PERBAIKAN: FUNGSI INI DIPINDAHKAN KE ATAS ---
     const handleDeleteAccount = useCallback(async (id: string) => {
         if (!window.confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) return;
         try {
-            // Cek dulu apakah akun ini memiliki turunan
             const hasChildren = accounts.some(acc => acc.parent_kode === accounts.find(a => a.id === id)?.kode);
             if (hasChildren) {
                 alert("Gagal menghapus: Akun ini masih memiliki akun turunan. Hapus atau pindahkan akun turunan terlebih dahulu.");
                 return;
             }
-            // Cek apakah ada jurnal yang masih menggunakan akun ini
-            // (Untuk performa, pengecekan ini bisa di-skip atau dilakukan di backend jika data besar)
-
             await deleteDoc(doc(db, "chart_of_accounts", id));
             alert("Akun berhasil dihapus.");
         } catch (error) {
             console.error("Error deleting account: ", error);
             alert("Gagal menghapus akun.");
         }
-    }, [accounts]); // Tambahkan `accounts` sebagai dependensi
+    }, [accounts]);
 
     const renderedAccountTree = useMemo(() => {
         const renderRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
@@ -340,5 +349,4 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
-
 
