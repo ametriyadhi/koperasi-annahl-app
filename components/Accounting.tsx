@@ -215,6 +215,27 @@ const Accounting: React.FC = () => {
         }
     }, []);
 
+    // --- PERBAIKAN: FUNGSI INI DIPINDAHKAN KE ATAS ---
+    const handleDeleteAccount = useCallback(async (id: string) => {
+        if (!window.confirm("Apakah Anda yakin ingin menghapus akun ini? Ini tidak dapat diurungkan.")) return;
+        try {
+            // Cek dulu apakah akun ini memiliki turunan
+            const hasChildren = accounts.some(acc => acc.parent_kode === accounts.find(a => a.id === id)?.kode);
+            if (hasChildren) {
+                alert("Gagal menghapus: Akun ini masih memiliki akun turunan. Hapus atau pindahkan akun turunan terlebih dahulu.");
+                return;
+            }
+            // Cek apakah ada jurnal yang masih menggunakan akun ini
+            // (Untuk performa, pengecekan ini bisa di-skip atau dilakukan di backend jika data besar)
+
+            await deleteDoc(doc(db, "chart_of_accounts", id));
+            alert("Akun berhasil dihapus.");
+        } catch (error) {
+            console.error("Error deleting account: ", error);
+            alert("Gagal menghapus akun.");
+        }
+    }, [accounts]); // Tambahkan `accounts` sebagai dependensi
+
     const renderedAccountTree = useMemo(() => {
         const renderRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
             return allAccounts
@@ -319,4 +340,5 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
+
 
