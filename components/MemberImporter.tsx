@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Papa from 'papaparse';
-import { writeBatch, collection, doc } from 'firebase/firestore';
+// Impor fungsi query dari firestore
+import { writeBatch, collection, doc, query, where, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota } from '../types';
 import { Unit } from '../types';
@@ -10,19 +11,34 @@ interface MemberImporterProps {
   onImportSuccess: () => void;
 }
 
-// Definisikan header baru yang wajib ada di file CSV
 const REQUIRED_HEADERS = ['nama', 'nip', 'unit', 'tgl_gabung', 'status', 'simpanan_pokok', 'simpanan_wajib', 'simpanan_sukarela', 'email', 'password'];
+
+/**
+ * Mengubah string mata uang (misal: "Rp 50.000") menjadi angka (50000).
+ * @param value String yang akan di-parse.
+ * @returns Angka hasil parse, atau 0 jika tidak valid.
+ */
+const parseCurrency = (value: string | number): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value !== 'string' || !value) return 0;
+    const cleanedString = value.replace(/[^0-9]/g, '');
+    return parseInt(cleanedString, 10) || 0;
+};
 
 const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSuccess }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [validData, setValidData] = useState<{anggota: Omit<Anggota, 'id'>, auth: {email: string, password: string}}[]>([]);
+  // Tipe data disesuaikan untuk proses validasi
+  const [validData, setValidData] = useState<any[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      setImportResult(null);
       parseAndValidateCsv(selectedFile);
     }
   };
@@ -37,7 +53,7 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
       skipEmptyLines: true,
       complete: (results) => {
         const localErrors: string[] = [];
-        const localValidData: {anggota: Omit<Anggota, 'id'>, auth: {email: string, password: string}}[] = [];
+        const localValidData: any[] = [];
 
         const fileHeaders = results.meta.fields || [];
         const missingHeaders = REQUIRED_HEADERS.filter(h => !fileHeaders.includes(h));
@@ -50,30 +66,27 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
 
         results.data.forEach((row: any, index) => {
           const rowNum = index + 2;
-          if (!row.nama || !row.nip || !row.email || !row.password) {
-            localErrors.push(`Baris ${rowNum}: 'nama', 'nip', 'email', dan 'password' tidak boleh kosong.`);
+          if (!row.nama || !row.nip || !row.email) {
+            localErrors.push(`Baris ${rowNum}: 'nama', 'nip', dan 'email' tidak boleh kosong.`);
             return;
           }
-          if (row.password.length < 6) {
-            localErrors.push(`Baris ${rowNum}: 'password' harus minimal 6 karakter.`);
+          // Password hanya wajib jika ini entri baru (akan dicek saat proses import)
+          if (row.password && row.password.length < 6) {
+            localErrors.push(`Baris ${rowNum}: 'password' untuk email ${row.email} harus minimal 6 karakter.`);
             return;
           }
 
           localValidData.push({
-            anggota: {
-              nama: row.nama,
-              nip: row.nip,
-              unit: row.unit as Unit || Unit.Supporting,
-              tgl_gabung: row.tgl_gabung || new Date().toISOString().split('T')[0],
-              status: row.status === 'Aktif' ? 'Aktif' : 'Tidak Aktif',
-              simpanan_pokok: Number(row.simpanan_pokok) || 0,
-              simpanan_wajib: Number(row.simpanan_wajib) || 0,
-              simpanan_sukarela: Number(row.simpanan_sukarela) || 0,
-            },
-            auth: {
-              email: row.email,
-              password: row.password,
-            }
+            nama: row.nama,
+            nip: row.nip,
+            unit: row.unit as Unit || Unit.Supporting,
+            tgl_gabung: row.tgl_gabung || new Date().toISOString().split('T')[0],
+            status: row.status === 'Aktif' ? 'Aktif' : 'Tidak Aktif',
+            simpanan_pokok: parseCurrency(row.simpanan_pokok),
+            simpanan_wajib: parseCurrency(row.simpanan_wajib),
+            simpanan_sukarela: parseCurrency(row.simpanan_sukarela),
+            email: row.email,
+            password: row.password,
           });
         });
 
@@ -98,28 +111,61 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
   const handleImport = async () => {
     if (validData.length === 0 || errors.length > 0) return;
     setIsProcessing(true);
+    setImportResult(null);
+    
+    const results = {
+        created: 0,
+        updated: 0,
+        errors: [] as string[],
+    };
+
     try {
       const batch = writeBatch(db);
-      const instructions: string[] = [];
+      const anggotaCollection = collection(db, 'anggota');
 
-      validData.forEach(item => {
-        const newAnggotaRef = doc(collection(db, 'anggota'));
-        batch.set(newAnggotaRef, item.anggota);
+      // Loop untuk memeriksa setiap baris data
+      for (const item of validData) {
+        // 1. Cek apakah NIP sudah ada
+        const q = query(anggotaCollection, where("nip", "==", item.nip), limit(1));
+        const querySnapshot = await getDocs(q);
 
-        const newUserRef = doc(db, "users", item.anggota.nip); 
-        batch.set(newUserRef, {
-            email: item.auth.email,
-            role: 'anggota',
-            anggota_id: newAnggotaRef.id,
-            uid: item.anggota.nip
-        });
-        instructions.push(`- Email: ${item.auth.email}, Pass: ${item.auth.password}`);
-      });
-      
+        const anggotaData = {
+            nama: item.nama,
+            nip: item.nip,
+            unit: item.unit,
+            tgl_gabung: item.tgl_gabung,
+            status: item.status,
+            simpanan_pokok: item.simpanan_pokok,
+            simpanan_wajib: item.simpanan_wajib,
+            simpanan_sukarela: item.simpanan_sukarela,
+        };
+
+        if (!querySnapshot.empty) {
+          // 2. JIKA ADA: Update dokumen yang ada
+          const existingDoc = querySnapshot.docs[0];
+          batch.update(existingDoc.ref, anggotaData);
+          results.updated++;
+        } else {
+          // 3. JIKA TIDAK ADA: Buat dokumen baru
+          if (!item.password) {
+              results.errors.push(`NIP ${item.nip}: Gagal dibuat karena password kosong.`);
+              continue; // Lanjut ke item berikutnya
+          }
+          const newAnggotaRef = doc(anggotaCollection);
+          batch.set(newAnggotaRef, anggotaData);
+          results.created++;
+          // Peringatan untuk membuat user secara manual tetap diperlukan
+          console.warn(`PERLU AKSI MANUAL: Buat user di Firebase Auth untuk NIP ${item.nip} dengan email ${item.email} dan hubungkan ke ID anggota ${newAnggotaRef.id}`);
+        }
+      }
+
+      // 4. Jalankan semua operasi update/create
       await batch.commit();
 
-      alert(`${validData.length} anggota berhasil diimpor!\n\nPENTING: Segera daftarkan semua pengguna ini di Firebase Authentication, lalu perbarui UID mereka di koleksi 'users'.\n\n${instructions.join('\n')}`);
+      setImportResult(results);
+      alert(`Proses selesai!\nAnggota Baru Dibuat: ${results.created}\nAnggota Diperbarui: ${results.updated}\nGagal: ${results.errors.length}\n\nPENTING: Untuk anggota baru, Anda tetap harus mendaftarkan akun mereka di Firebase Authentication secara manual.`);
       onImportSuccess();
+
     } catch (error) {
       console.error("Error importing data: ", error);
       alert("Terjadi kesalahan saat mengimpor data.");
@@ -130,9 +176,10 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
 
   return (
     <div className="p-2">
+      {/* Bagian UI (form, tombol, dll) tidak berubah */}
       <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg space-y-4">
         <h4 className="font-semibold text-gray-700">Langkah 1: Unduh dan Isi Template</h4>
-        <p className="text-sm text-gray-600">Gunakan template CSV untuk memastikan semua kolom sesuai. Isi data anggota pada file tersebut.</p>
+        <p className="text-sm text-gray-600">Gunakan template CSV untuk memastikan semua kolom sesuai.</p>
         <button onClick={handleDownloadTemplate} className="text-sm font-medium text-primary hover:underline">
           Unduh Template CSV
         </button>
@@ -144,42 +191,32 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
         <input type="file" accept=".csv" onChange={handleFileChange} className="text-sm" />
       </div>
 
-      {isProcessing && <p className="mt-4">Memproses file...</p>}
+      {isProcessing && <p className="mt-4 text-center">Memproses...</p>}
       
       {errors.length > 0 && (
         <div className="mt-4 p-4 bg-red-50 text-red-700 rounded-lg">
-          <h4 className="font-bold">Ditemukan Error!</h4>
+          <h4 className="font-bold">Ditemukan Error Validasi!</h4>
           <ul className="list-disc list-inside text-sm">
             {errors.map((err, i) => <li key={i}>{err}</li>)}
           </ul>
         </div>
       )}
 
-      {validData.length > 0 && (
-        <div className="mt-4">
-          <h4 className="font-semibold">Pratinjau Data (Max 5 baris)</h4>
-          <p className="text-sm text-gray-600">{validData.length} data anggota siap untuk diimpor.</p>
-          <div className="overflow-x-auto mt-2 border rounded-lg">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>{REQUIRED_HEADERS.map(h => <th key={h} className="p-2 text-left font-medium">{h}</th>)}</tr>
-              </thead>
-              <tbody>
-                {validData.slice(0, 5).map((d, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="p-2">{d.nama}</td>
-                    <td className="p-2">{d.nip}</td>
-                    <td className="p-2">{d.unit}</td>
-                    <td className="p-2">{d.tgl_gabung}</td>
-                    <td className="p-2">{d.status}</td>
-                    <td className="p-2">{d.simpanan_pokok}</td>
-                    <td className="p-2">{d.simpanan_wajib}</td>
-                    <td className="p-2">{d.simpanan_sukarela}</td>
-                  </tr>
+      {importResult && (
+        <div className="mt-4 p-4 bg-green-50 text-green-800 rounded-lg">
+          <h4 className="font-bold">Proses Impor Selesai!</h4>
+          <p>Berhasil Dibuat: {importResult.created}</p>
+          <p>Berhasil Diperbarui: {importResult.updated}</p>
+          {importResult.errors.length > 0 && (
+            <div className="mt-2 text-sm text-red-700">
+              <p className="font-semibold">Detail Kegagalan:</p>
+              <ul className="list-disc list-inside">
+                {importResult.errors.map((err: string, i: number) => (
+                  <li key={i}>{err}</li>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </ul>
+            </div>
+          )}
         </div>
       )}
 
@@ -192,7 +229,7 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
           disabled={isProcessing || errors.length > 0 || validData.length === 0}
           className="px-4 py-2 bg-primary text-white text-sm font-medium rounded-md hover:bg-amber-500 disabled:bg-gray-400 disabled:cursor-not-allowed"
         >
-          Impor {validData.length > 0 ? `${validData.length} Anggota` : 'Data'}
+          {isProcessing ? 'Memproses...' : `Impor/Update ${validData.length} Anggota`}
         </button>
       </div>
     </div>
@@ -200,4 +237,5 @@ const MemberImporter: React.FC<MemberImporterProps> = ({ onClose, onImportSucces
 };
 
 export default MemberImporter;
+
 
