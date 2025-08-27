@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, runTransaction } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
-import { Unit } from '../types';
+import { Unit, StatusKontrak } from '../types';
 import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 
-// Tipe data baru khusus untuk laporan ini
+// Tipe data baru yang lebih fleksibel untuk laporan CSV
 interface AutodebetReportRow {
   nama: string;
-  unit: Unit;
-  simpananWajib: number;
+  unit: Unit | string;
+  simpananWajib: number | string;
   angsuranKe: number | string;
   cicilanPokok: number;
   cicilanMargin: number;
@@ -19,80 +19,127 @@ interface AutodebetReportRow {
 
 const MonthlyProcess: React.FC = () => {
   const { settings } = useSettings();
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const generateAutodebetCsv = async () => {
-    setIsGenerating(true);
+  const processAndGenerateCsv = async () => {
+    if (!window.confirm("Aksi ini akan MENAMBAH SIMPANAN WAJIB & CICILAN MURABAHAH secara permanen, lalu membuat laporan CSV. Lanjutkan?")) {
+      return;
+    }
+
+    setIsProcessing(true);
     try {
-      // 1. Ambil semua data yang diperlukan
-      const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
-      const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
+      // Variabel untuk menyimpan total yang akan dijumlahkan
+      let grandTotalSimpanan = 0;
+      let grandTotalPokok = 0;
+      let grandTotalMargin = 0;
+      let reportData: AutodebetReportRow[] = [];
 
-      const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
-        getDocs(anggotaQuery),
-        getDocs(kontrakQuery),
-      ]);
+      await runTransaction(db, async (transaction) => {
+        // --- TAHAP 1: BACA SEMUA DATA ---
+        const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
+        const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
+        
+        const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
+            transaction.get(anggotaQuery),
+            transaction.get(kontrakQuery)
+        ]);
+        
+        const anggotaAktif = anggotaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Anggota));
+        const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
 
-      const anggotaAktif = anggotaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anggota));
-      const kontrakBerjalan = kontrakSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KontrakMurabahah));
-      const kontrakMap = new Map(kontrakBerjalan.map(k => [k.anggota_id, k]));
+        // Kelompokkan kontrak berdasarkan anggota_id
+        const kontrakByAnggota = new Map<string, KontrakMurabahah[]>();
+        kontrakBerjalan.forEach(k => {
+            const list = kontrakByAnggota.get(k.anggota_id) || [];
+            list.push(k);
+            kontrakByAnggota.set(k.anggota_id, list);
+        });
 
-      // 2. Proses dan hitung data untuk setiap anggota
-      const reportData: AutodebetReportRow[] = anggotaAktif.map(anggota => {
-        const simpananWajib = settings.simpanan_wajib || 50000;
-        const kontrak = kontrakMap.get(anggota.id);
+        // --- TAHAP 2: PROSES & PERSIAPKAN DATA UNTUK CSV ---
+        const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
+        
+        // Urutkan anggota berdasarkan unit
+        anggotaAktif.sort((a, b) => unitOrder.indexOf(a.unit) - unitOrder.indexOf(b.unit));
 
-        let angsuranKe: number | string = '';
-        let cicilanPokok = 0;
-        let cicilanMargin = 0;
+        for (const anggota of anggotaAktif) {
+            const simpananWajib = settings.simpanan_wajib || 50000;
+            const kontrakAnggota = kontrakByAnggota.get(anggota.id) || [];
+            
+            grandTotalSimpanan += simpananWajib;
 
-        if (kontrak) {
-          angsuranKe = (kontrak.cicilan_terbayar || 0) + 1;
-          cicilanPokok = (kontrak.harga_pokok - (kontrak.uang_muka || 0)) / kontrak.tenor;
-          cicilanMargin = (kontrak.margin || 0) / kontrak.tenor;
+            if (kontrakAnggota.length > 0) {
+                kontrakAnggota.forEach((kontrak, index) => {
+                    const angsuranKe = (kontrak.cicilan_terbayar || 0) + 1;
+                    const cicilanPokok = (kontrak.harga_pokok - (kontrak.uang_muka || 0)) / kontrak.tenor;
+                    const cicilanMargin = (kontrak.margin || 0) / kontrak.tenor;
+                    
+                    grandTotalPokok += cicilanPokok;
+                    grandTotalMargin += cicilanMargin;
+                    
+                    reportData.push({
+                        // Nama, unit, dan simpanan hanya di baris pertama jika ada banyak cicilan
+                        nama: index === 0 ? anggota.nama : '',
+                        unit: index === 0 ? anggota.unit : '',
+                        simpananWajib: index === 0 ? simpananWajib : '',
+                        angsuranKe,
+                        cicilanPokok,
+                        cicilanMargin,
+                        total: cicilanPokok + cicilanMargin + (index === 0 ? simpananWajib : 0),
+                    });
+                });
+            } else {
+                // Anggota yang hanya bayar simpanan wajib
+                reportData.push({
+                    nama: anggota.nama,
+                    unit: anggota.unit,
+                    simpananWajib,
+                    angsuranKe: '',
+                    cicilanPokok: 0,
+                    cicilanMargin: 0,
+                    total: simpananWajib,
+                });
+            }
+
+            // --- TAHAP 3: PERSIAPKAN OPERASI TULIS (WRITE) ---
+            // Update simpanan wajib anggota
+            const anggotaRef = doc(db, "anggota", anggota.id);
+            transaction.update(anggotaRef, { simpanan_wajib: (anggota.simpanan_wajib || 0) + simpananWajib });
+
+            // Update setiap kontrak yang dimiliki anggota
+            for (const kontrak of kontrakAnggota) {
+                const kontrakRef = doc(db, "kontrak_murabahah", kontrak.id);
+                const cicilanTerbayarBaru = (kontrak.cicilan_terbayar || 0) + 1;
+                const statusBaru = cicilanTerbayarBaru >= kontrak.tenor ? StatusKontrak.LUNAS : kontrak.status;
+                transaction.update(kontrakRef, { cicilan_terbayar: cicilanTerbayarBaru, status: statusBaru });
+            }
         }
-
-        const total = simpananWajib + cicilanPokok + cicilanMargin;
-
-        return {
-          nama: anggota.nama,
-          unit: anggota.unit,
-          simpananWajib,
-          angsuranKe,
-          cicilanPokok,
-          cicilanMargin,
-          total,
-        };
       });
 
-      // 3. Urutkan data berdasarkan unit
-      const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
-      reportData.sort((a, b) => {
-        const unitComparison = unitOrder.indexOf(a.unit) - unitOrder.indexOf(b.unit);
-        if (unitComparison !== 0) {
-          return unitComparison;
-        }
-        return a.nama.localeCompare(b.nama); // Urutkan berdasarkan nama jika unit sama
-      });
-
-      // 4. Buat konten file CSV
+      // --- TAHAP 4: BUAT DAN UNDUH FILE CSV ---
       const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
-      const csvContent = [
-        headers.join(','),
-        ...reportData.map(row => 
-          [
-            `"${row.nama}"`,
-            row.unit,
-            row.simpananWajib,
-            row.angsuranKe,
-            Math.round(row.cicilanPokok), // Pembulatan untuk angka bersih
-            Math.round(row.cicilanMargin),
-            Math.round(row.total)
-          ].join(',')
-        )
-      ].join('\n');
+      const csvRows = reportData.map(row => 
+        [
+          `"${row.nama}"`,
+          row.unit,
+          row.simpananWajib,
+          row.angsuranKe,
+          Math.round(row.cicilanPokok),
+          Math.round(row.cicilanMargin),
+          Math.round(row.total)
+        ].join(',')
+      );
+      
+      // Tambahkan baris total di akhir
+      const totalRow = [
+          '"TOTAL"', '', 
+          Math.round(grandTotalSimpanan), '', 
+          Math.round(grandTotalPokok), 
+          Math.round(grandTotalMargin), 
+          Math.round(grandTotalSimpanan + grandTotalPokok + grandTotalMargin)
+      ].join(',');
 
-      // 5. Buat file dan trigger download
+      const csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
+
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -103,35 +150,38 @@ const MonthlyProcess: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       
-      alert('Laporan CSV berhasil dibuat!');
+      alert('Proses bulanan berhasil dijalankan dan laporan CSV telah dibuat!');
 
     } catch (error: any) {
-      console.error("Gagal membuat laporan autodebet: ", error);
+      console.error("Gagal menjalankan proses bulanan: ", error);
       alert(`Terjadi kesalahan: ${error.message}`);
     } finally {
-      setIsGenerating(false);
+      setIsProcessing(false);
     }
   };
 
   return (
-    <Card title="Generator Laporan Autodebet">
+    <Card title="Proses Bulanan & Generator Laporan Autodebet">
         <div className="p-6 space-y-6">
-            <div className="p-4 bg-blue-50 text-blue-800 rounded-lg">
-                <h4 className="font-bold">Informasi</h4>
+            <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg">
+                <h4 className="font-bold">Peringatan Penting!</h4>
                 <p className="text-sm">
-                  Tombol di bawah ini akan mengambil data terbaru dari semua anggota aktif dan pembiayaan yang berjalan, 
-                  lalu membuat file CSV laporan autodebet sesuai format yang dibutuhkan untuk diserahkan ke bagian SDM.
-                  <br/>
-                  <strong>Aksi ini tidak akan mengubah data apa pun di dalam sistem.</strong>
+                  Tombol di bawah ini akan menjalankan **proses bulanan permanen**:
+                  <ul className="list-disc pl-5 mt-2">
+                    <li>Menambah saldo <strong>Simpanan Wajib</strong> untuk semua anggota aktif.</li>
+                    <li>Menambah hitungan <strong>angsuran terbayar</strong> untuk semua pembiayaan berjalan.</li>
+                    <li>Membuat dan mengunduh <strong>laporan CSV</strong> untuk diserahkan ke SDM.</li>
+                  </ul>
+                  Pastikan Anda menjalankan ini hanya **satu kali per bulan**.
                 </p>
             </div>
             <div className="text-center">
                 <button 
-                  onClick={generateAutodebetCsv} 
-                  disabled={isGenerating} 
-                  className="px-8 py-3 bg-primary text-white font-bold rounded-lg hover:bg-lime-600 disabled:bg-gray-400 shadow-lg"
+                  onClick={processAndGenerateCsv} 
+                  disabled={isProcessing} 
+                  className="px-8 py-3 bg-secondary text-white font-bold rounded-lg hover:bg-orange-600 disabled:bg-gray-400 shadow-lg"
                 >
-                    {isGenerating ? 'Sedang Membuat Laporan...' : 'Buat & Unduh Laporan CSV'}
+                    {isProcessing ? 'Sedang Memproses...' : 'Jalankan Proses & Buat Laporan'}
                 </button>
             </div>
         </div>
@@ -140,5 +190,6 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
+
 
 
