@@ -10,7 +10,6 @@ import JurnalUmum from './JurnalUmum';
 import ManualJournalForm from './ManualJournalForm';
 import { PlusCircleIcon } from './icons';
 
-// ... (Komponen AccountRow dan formatCurrency tidak berubah)
 type AccountingTab = 'Bagan Akun' | 'Jurnal Umum';
 
 const formatCurrency = (value: number) => {
@@ -52,7 +51,7 @@ const Accounting: React.FC = () => {
     const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
     const [isJournalModalOpen, setIsJournalModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<Akun | null>(null);
-    const [editingJurnal, setEditingJurnal] = useState<JurnalEntry | null>(null); // State baru untuk edit jurnal
+    const [editingJurnal, setEditingJurnal] = useState<JurnalEntry | null>(null);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(collection(db, "chart_of_accounts"), (snapshot) => {
@@ -74,20 +73,17 @@ const Accounting: React.FC = () => {
         setEditingAccount(null);
     }, []);
     
-    // Fungsi baru untuk membuka modal jurnal
     const handleOpenJournalModal = useCallback((jurnal: JurnalEntry | null = null) => {
         setEditingJurnal(jurnal);
         setIsJournalModalOpen(true);
     }, []);
 
-    // Fungsi baru untuk menutup modal jurnal
     const handleCloseJournalModal = useCallback(() => {
         setIsJournalModalOpen(false);
         setEditingJurnal(null);
     }, []);
 
     const handleSaveAccount = useCallback(async (akunData: Omit<Akun, 'id' | 'saldo'>) => {
-        // ... (fungsi ini tidak berubah dari sebelumnya)
         try {
             if (editingAccount) {
                 const docRef = doc(db, "chart_of_accounts", editingAccount.id);
@@ -114,28 +110,26 @@ const Accounting: React.FC = () => {
         }
     }, [editingAccount, handleCloseAccountModal]);
 
-    // --- FUNGSI BARU DAN LOGIKA UPDATE JURNAL ---
     const handleSaveOrUpdateJournal = useCallback(async (deskripsi: string, lines: JurnalEntryLine[], entryId?: string) => {
         try {
             await runTransaction(db, async (transaction) => {
                 const accountsMap = new Map<string, Akun>();
                 
-                // Ambil data semua akun yang terlibat
                 const allAccountIds = new Set(lines.map(l => l.akun_id));
                 if (entryId) {
-                    const oldJurnalDoc = await transaction.get(doc(db, "jurnal_umum", entryId));
-                    if (oldJurnalDoc.exists()) {
-                        oldJurnalDoc.data().lines.forEach((l: JurnalEntryLine) => allAccountIds.add(l.akun_id));
-                    }
-                }
-                for (const accId of allAccountIds) {
-                    const accDoc = await transaction.get(doc(db, "chart_of_accounts", accId));
-                    if (accDoc.exists()) {
-                        accountsMap.set(accId, accDoc.data() as Akun);
+                    const oldJurnalDocSnap = await transaction.get(doc(db, "jurnal_umum", entryId));
+                    if (oldJurnalDocSnap.exists()) {
+                        oldJurnalDocSnap.data().lines.forEach((l: JurnalEntryLine) => allAccountIds.add(l.akun_id));
                     }
                 }
 
-                // Jika ini adalah EDIT, batalkan dulu efek jurnal lama
+                for (const accId of allAccountIds) {
+                    const accDocSnap = await transaction.get(doc(db, "chart_of_accounts", accId));
+                    if (accDocSnap.exists()) {
+                        accountsMap.set(accId, { id: accDocSnap.id, ...accDocSnap.data() } as Akun);
+                    }
+                }
+
                 if (entryId) {
                     const oldJurnalRef = doc(db, "jurnal_umum", entryId);
                     const oldJurnalDoc = await transaction.get(oldJurnalRef);
@@ -152,7 +146,6 @@ const Accounting: React.FC = () => {
                     }
                 }
 
-                // Terapkan efek jurnal baru (baik untuk create maupun update)
                 for (const line of lines) {
                     const acc = accountsMap.get(line.akun_id);
                     if (acc) {
@@ -164,12 +157,10 @@ const Accounting: React.FC = () => {
                     }
                 }
 
-                // Simpan perubahan saldo ke semua akun yang terpengaruh
                 for (const [id, acc] of accountsMap.entries()) {
                     transaction.update(doc(db, "chart_of_accounts", id), { saldo: acc.saldo });
                 }
 
-                // Simpan atau update dokumen jurnal itu sendiri
                 if (entryId) {
                     transaction.update(doc(db, "jurnal_umum", entryId), { deskripsi, lines });
                 } else {
@@ -189,7 +180,6 @@ const Accounting: React.FC = () => {
 
 
     const handleDeleteJurnal = useCallback(async (jurnalId: string) => {
-        // ... (Fungsi ini tidak berubah dari sebelumnya)
          if (!window.confirm("Menghapus jurnal ini akan membalikkan saldo pada akun terkait. Lanjutkan?")) return;
 
         try {
@@ -226,7 +216,6 @@ const Accounting: React.FC = () => {
     }, []);
 
     const renderedAccountTree = useMemo(() => {
-        // ... (Fungsi ini tidak berubah dari sebelumnya)
         const renderRecursively = (parentId: string | undefined, allAccounts: Akun[], level = 0): JSX.Element[] => {
             return allAccounts
                 .filter(a => a.parent_kode === parentId)
@@ -246,7 +235,6 @@ const Accounting: React.FC = () => {
 
     return (
         <>
-            {/* ... (Bagian UI tidak banyak berubah, hanya pemanggilan fungsinya) ... */}
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     {(['Bagan Akun', 'Jurnal Umum'] as AccountingTab[]).map((tab) => (
@@ -331,6 +319,4 @@ const Accounting: React.FC = () => {
 };
 
 export default Accounting;
-
-
 
