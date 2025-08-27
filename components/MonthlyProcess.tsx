@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { collection, getDocs, query, where, doc, writeBatch } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, writeBatch, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { Unit, StatusKontrak } from '../types';
@@ -21,19 +21,20 @@ interface AutodebetReportRow {
 interface ProcessData {
   anggotaToUpdate: { id: string, newSimpananWajib: number }[];
   kontrakToUpdate: { id: string, newCicilanTerbayar: number, newStatus: StatusKontrak }[];
+  csvContent: string; // Menambahkan konten CSV untuk diarsipkan
+  reportName: string; // Menambahkan nama laporan
 }
 
 const MonthlyProcess: React.FC = () => {
   const { settings } = useSettings();
   const [isLoading, setIsLoading] = useState(false);
-  const [processData, setProcessData] = useState<ProcessData | null>(null); // Menyimpan data yang siap diproses
+  const [processData, setProcessData] = useState<ProcessData | null>(null);
 
   // FUNGSI 1: HANYA UNTUK MEMBUAT & MENGUNDUH LAPORAN (READ-ONLY)
   const generateReport = async () => {
     setIsLoading(true);
-    setProcessData(null); // Reset data proses setiap kali laporan baru dibuat
+    setProcessData(null);
     try {
-      // --- TAHAP 1: BACA DATA ---
       const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
       const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
       
@@ -45,7 +46,6 @@ const MonthlyProcess: React.FC = () => {
       const anggotaAktif = anggotaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Anggota));
       const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
 
-      // --- TAHAP 2: PROSES DATA UNTUK LAPORAN & PERSIAPAN PROSES ---
       const kontrakByAnggota = new Map<string, KontrakMurabahah[]>();
       kontrakBerjalan.forEach(k => {
           const list = kontrakByAnggota.get(k.anggota_id) || [];
@@ -64,7 +64,7 @@ const MonthlyProcess: React.FC = () => {
       let reportData: AutodebetReportRow[] = [];
       let grandTotalSimpanan = 0, grandTotalPokok = 0, grandTotalMargin = 0;
       
-      const dataForProcessing: ProcessData = { anggotaToUpdate: [], kontrakToUpdate: [] };
+      const dataForProcessing: ProcessData = { anggotaToUpdate: [], kontrakToUpdate: [], csvContent: '', reportName: '' };
 
       anggotaAktif.forEach(anggota => {
           const simpananWajib = settings.simpanan_wajib || 50000;
@@ -101,19 +101,20 @@ const MonthlyProcess: React.FC = () => {
           }
       });
       
-      setProcessData(dataForProcessing); // Simpan data yang akan dieksekusi nanti
-
-      // --- TAHAP 3: BUAT DAN UNDUH CSV ---
       const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
       const csvRows = reportData.map(row => [`"${row.nama}"`, row.unit, row.simpananWajib, row.angsuranKe, Math.round(row.cicilanPokok), Math.round(row.cicilanMargin), Math.round(row.total)].join(','));
       const totalRow = ['"TOTAL"', '', Math.round(grandTotalSimpanan), '', Math.round(grandTotalPokok), Math.round(grandTotalMargin), Math.round(grandTotalSimpanan + grandTotalPokok + grandTotalMargin)].join(',');
-      const csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
+      
+      dataForProcessing.csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
+      dataForProcessing.reportName = `Laporan Autodebet - ${new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
+      
+      setProcessData(dataForProcessing);
 
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const blob = new Blob([dataForProcessing.csvContent], { type: 'text/csv;charset=utf-8;' });
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
-      link.setAttribute('download', `laporan_autodebet_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`);
+      link.setAttribute('download', `${dataForProcessing.reportName.replace(/ /g, '_')}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -139,21 +140,27 @@ const MonthlyProcess: React.FC = () => {
     try {
       const batch = writeBatch(db);
 
-      // Update simpanan anggota
       processData.anggotaToUpdate.forEach(item => {
         const ref = doc(db, "anggota", item.id);
         batch.update(ref, { simpanan_wajib: item.newSimpananWajib });
       });
 
-      // Update angsuran kontrak
       processData.kontrakToUpdate.forEach(item => {
         const ref = doc(db, "kontrak_murabahah", item.id);
         batch.update(ref, { cicilan_terbayar: item.newCicilanTerbayar, status: item.newStatus });
       });
 
+      // --- PENAMBAHAN: Simpan laporan ke arsip ---
+      const arsipRef = collection(db, "laporan_arsip");
+      await addDoc(arsipRef, {
+          namaLaporan: processData.reportName,
+          tanggalDibuat: new Date().toISOString(),
+          dataLaporan: processData.csvContent, // Simpan sebagai string CSV
+      });
+
       await batch.commit();
-      alert("Proses bulanan berhasil dijalankan! Data simpanan dan angsuran telah diperbarui.");
-      setProcessData(null); // Reset setelah berhasil
+      alert("Proses bulanan berhasil dijalankan! Data telah diperbarui dan laporan telah diarsipkan.");
+      setProcessData(null);
     } catch (error: any) {
       alert(`Gagal menjalankan proses: ${error.message}`);
     } finally {
@@ -183,7 +190,7 @@ const MonthlyProcess: React.FC = () => {
               <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg">
                   <h4 className="font-bold">Langkah 2: Konfirmasi & Jalankan Proses (Permanen)</h4>
                   <p className="text-sm">
-                    Laporan telah dibuat. Klik tombol di bawah untuk menyimpan perubahan simpanan dan angsuran ke database. 
+                    Laporan telah dibuat. Klik tombol di bawah untuk menyimpan perubahan simpanan dan angsuran ke database, serta mengarsipkan laporan ini. 
                     <strong>Aksi ini bersifat permanen.</strong>
                   </p>
                   <button 
@@ -201,6 +208,7 @@ const MonthlyProcess: React.FC = () => {
 };
 
 export default MonthlyProcess;
+
 
 
 
