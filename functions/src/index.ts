@@ -1,11 +1,13 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 
+// Inisialisasi Firebase Admin SDK
 admin.initializeApp();
 
+// Tipe data untuk user yang dikirim dari client
 interface UserToCreate {
   email: string;
-  password?: string; // Password sekarang opsional
+  password: string;
   nama: string;
   nip: string;
   unit: string;
@@ -17,10 +19,14 @@ interface UserToCreate {
 }
 
 /**
- * Cloud Function untuk membuat atau memperbarui pengguna secara massal.
- * Fungsi ini akan memeriksa NIP, jika sudah ada maka akan update, jika tidak ada maka akan membuat baru.
+ * Cloud Function yang dapat dipanggil untuk membuat pengguna secara massal.
+ * Menerima array objek pengguna, mendaftarkannya ke Authentication,
+ * lalu menyimpan datanya ke Firestore.
  */
 export const bulkCreateUsers = functions.https.onCall(async (data, context) => {
+  // 1. Verifikasi bahwa yang memanggil adalah admin atau pengurus
+  // (Pastikan Anda sudah mengatur custom claims jika perlu keamanan lebih)
+  // Untuk saat ini, kita cek apakah user sudah login.
   if (!context.auth) {
     throw new functions.https.HttpsError(
       "unauthenticated",
@@ -37,24 +43,25 @@ export const bulkCreateUsers = functions.https.onCall(async (data, context) => {
   }
 
   const results = {
-    successCreateCount: 0,
-    successUpdateCount: 0, // Menambahkan counter untuk update
+    successCount: 0,
     errorCount: 0,
-    errors: [] as { nip: string; email: string; reason: string }[],
+    errors: [] as { email: string; reason: string }[],
   };
 
   const db = admin.firestore();
-  const auth = admin.auth();
 
+  // 2. Loop melalui setiap user dari data yang dikirim
   for (const user of users) {
     try {
-      // --- LOGIKA BARU: Cek apakah anggota dengan NIP ini sudah ada ---
-      const anggotaQuery = await db
-        .collection("anggota")
-        .where("nip", "==", user.nip)
-        .limit(1)
-        .get();
+      // 3. Buat user di Firebase Authentication
+      const userRecord = await admin.auth().createUser({
+        email: user.email,
+        password: user.password,
+        displayName: user.nama,
+        disabled: false,
+      });
 
+      // 4. Siapkan data anggota untuk Firestore
       const anggotaData = {
         nama: user.nama,
         nip: user.nip,
@@ -66,54 +73,29 @@ export const bulkCreateUsers = functions.https.onCall(async (data, context) => {
         simpanan_sukarela: user.simpanan_sukarela,
       };
 
-      if (!anggotaQuery.empty) {
-        // --- JIKA ANGGOTA SUDAH ADA: LAKUKAN UPDATE ---
-        const existingAnggotaDoc = anggotaQuery.docs[0];
-        await existingAnggotaDoc.ref.update(anggotaData);
-        results.successUpdateCount++;
-      } else {
-        // --- JIKA ANGGOTA BELUM ADA: LAKUKAN CREATE ---
-        if (!user.password || user.password.length < 6) {
-            throw new Error("Password wajib diisi (min. 6 karakter) untuk anggota baru.");
-        }
-        
-        try {
-            await auth.getUserByEmail(user.email);
-            throw new Error(`Email ${user.email} sudah terdaftar.`);
-        } catch (error: any) {
-            if (error.code !== 'auth/user-not-found') {
-                throw error;
-            }
-        }
+      // 5. Buat dokumen baru di koleksi 'anggota'
+      const anggotaRef = await db.collection("anggota").add(anggotaData);
 
-        const userRecord = await auth.createUser({
-          email: user.email,
-          password: user.password,
-          displayName: user.nama,
-          disabled: false,
-        });
+      // 6. Buat dokumen di koleksi 'users' untuk mapping peran
+      await db.collection("users").doc(userRecord.uid).set({
+        uid: userRecord.uid,
+        email: user.email,
+        role: "anggota", // Atur peran default sebagai 'anggota'
+        anggota_id: anggotaRef.id,
+      });
 
-        const anggotaRef = await db.collection("anggota").add(anggotaData);
-
-        await db.collection("users").doc(userRecord.uid).set({
-          uid: userRecord.uid,
-          email: user.email,
-          role: "anggota",
-          anggota_id: anggotaRef.id,
-        });
-
-        results.successCreateCount++;
-      }
+      results.successCount++;
     } catch (error: any) {
+      // Jika gagal, catat errornya
       results.errorCount++;
       results.errors.push({
-        nip: user.nip,
         email: user.email,
         reason: error.message || "Terjadi kesalahan tidak diketahui.",
       });
     }
   }
 
+  // 7. Kembalikan hasil prosesnya ke client
   return results;
 });
 
