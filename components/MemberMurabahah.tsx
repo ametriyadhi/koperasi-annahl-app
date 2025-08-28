@@ -4,6 +4,7 @@ import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
 import { useSettings } from './SettingsContext';
+import MurabahahHistory from './MurabahahHistory'; // Impor komponen baru
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -18,11 +19,8 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
     const [pengajuanList, setPengajuanList] = useState<KontrakMurabahah[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ 
-        nama_barang: '', 
-        harga_pokok: 0, // Ini adalah "Jumlah Pengajuan Plafon"
-        tenor: 12 
-    });
+    const [formData, setFormData] = useState({ nama_barang: '', harga_pokok: 0, tenor: 12 });
+    const [expandedKontrakId, setExpandedKontrakId] = useState<string | null>(null); // State untuk riwayat
 
     useEffect(() => {
         const q = query(collection(db, "kontrak_murabahah"), where("anggota_id", "==", anggota.id));
@@ -73,6 +71,10 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
         setFormData({ nama_barang: '', harga_pokok: 0, tenor: 12 });
     };
 
+    const toggleHistory = (kontrakId: string) => {
+        setExpandedKontrakId(prevId => (prevId === kontrakId ? null : kontrakId));
+    };
+
     return (
         <div className="p-4 space-y-4">
             <div className="flex justify-between items-center">
@@ -105,14 +107,25 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
             )}
 
             {loading ? <p>Memuat...</p> : pengajuanList.map(p => (
-                <div key={p.id} className="bg-white p-3 rounded-lg shadow-sm">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <p className="font-bold">{p.nama_barang}</p>
-                            <p className="text-sm text-gray-600">{formatCurrency(p.harga_jual)} ({p.tenor} bln)</p>
+                <div key={p.id} className="bg-white rounded-lg shadow-sm">
+                    <div className="p-3">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="font-bold">{p.nama_barang}</p>
+                                <p className="text-sm text-gray-600">{formatCurrency(p.harga_jual)} ({p.tenor} bln)</p>
+                            </div>
+                            <span className="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">{p.status}</span>
                         </div>
-                        <span className="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">{p.status}</span>
+                        <button onClick={() => toggleHistory(p.id)} className="text-sm text-primary font-semibold mt-2">
+                            {expandedKontrakId === p.id ? 'Tutup Riwayat' : 'Lihat Riwayat Pembayaran'}
+                        </button>
                     </div>
+                    {/* Tampilkan riwayat jika di-klik */}
+                    {expandedKontrakId === p.id && (
+                        <div className="border-t">
+                            <MurabahahHistory kontrakId={p.id} />
+                        </div>
+                    )}
                 </div>
             ))}
         </div>
