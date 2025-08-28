@@ -5,9 +5,9 @@ import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak, Unit } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
-import MurabahahHistory from './MurabahahHistory';
 import MurabahahForm from './MurabahahForm';
 import MurabahahImporter from './MurabahahImporter';
+import MurabahahHistory from './MurabahahHistory';
 import { PlusCircleIcon, ArrowDownUpIcon } from './icons';
 
 const formatCurrency = (value: number) => {
@@ -31,10 +31,10 @@ const Murabahah: React.FC = () => {
     const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
     const [editingKontrak, setEditingKontrak] = useState<KontrakMurabahah | null>(null);
+    const [viewingHistoryKontrak, setViewingHistoryKontrak] = useState<KontrakMurabahah | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [unitFilter, setUnitFilter] = useState('Semua');
     const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
-    const [viewingHistoryKontrak, setViewingHistoryKontrak] = useState<KontrakMurabahah | null>(null);
 
     useEffect(() => {
         const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
@@ -74,8 +74,10 @@ const Murabahah: React.FC = () => {
         // Sorting
         if (sortConfig !== null) {
             combinedData.sort((a, b) => {
-                if (a[sortConfig.key] < b[sortConfig.key]) return sortConfig.direction === 'ascending' ? -1 : 1;
-                if (a[sortConfig.key] > b[sortConfig.key]) return sortConfig.direction === 'ascending' ? 1 : -1;
+                const valA = a[sortConfig.key];
+                const valB = b[sortConfig.key];
+                if (valA < valB) return sortConfig.direction === 'ascending' ? -1 : 1;
+                if (valA > valB) return sortConfig.direction === 'ascending' ? 1 : -1;
                 return 0;
             });
         } else {
@@ -100,20 +102,11 @@ const Murabahah: React.FC = () => {
 
     const handleExportCsv = () => {
         const headers = ['Nama Anggota', 'Unit', 'Nama Barang', 'Tgl Realisasi', 'Tenor', 'Harga Pokok', 'Margin', 'Total Pembiayaan', 'Angsuran/Bln', 'Terbayar', 'Sisa Hutang'];
-        // --- PERBAIKAN: Pembulatan angka ditambahkan di sini ---
         const csvRows = sortedAndFilteredContracts.map(k => 
             [
-                `"${k.anggotaNama}"`, 
-                k.anggotaUnit, 
-                `"${k.nama_barang}"`, 
-                new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
-                k.tenor, 
-                Math.round(k.harga_pokok), 
-                Math.round(k.margin), 
-                Math.round(k.harga_jual), 
-                Math.round(k.cicilan_per_bulan), 
-                k.cicilan_terbayar, 
-                Math.round(k.sisaHutang)
+                `"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`, new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
+                k.tenor, Math.round(k.harga_pokok), Math.round(k.margin), Math.round(k.harga_jual), 
+                Math.round(k.cicilan_per_bulan), k.cicilan_terbayar, Math.round(k.sisaHutang)
             ].join(',')
         );
         const csvContent = [headers.join(','), ...csvRows].join('\n');
@@ -127,6 +120,7 @@ const Murabahah: React.FC = () => {
     };
 
     const handleOpenFormModal = (kontrak: KontrakMurabahah | null = null) => {
+        setViewingHistoryKontrak(null);
         setEditingKontrak(kontrak);
         setIsFormModalOpen(true);
     };
@@ -146,9 +140,10 @@ const Murabahah: React.FC = () => {
         } catch (error) { console.error("Error saving contract: ", error); }
     };
     const handleDeleteKontrak = async (id: string) => {
-        if (window.confirm("Apakah Anda yakin ingin menghapus kontrak ini?")) {
+        if (window.confirm("Apakah Anda yakin ingin menghapus kontrak ini? Semua riwayatnya juga akan terhapus.")) {
             try {
                 await deleteDoc(doc(db, "kontrak_murabahah", id));
+                setViewingHistoryKontrak(null);
             } catch (error) { console.error("Error deleting contract: ", error); }
         }
     };
@@ -187,36 +182,34 @@ const Murabahah: React.FC = () => {
                     <table className="min-w-full divide-y divide-gray-200 text-xs">
                         <thead className="bg-gray-50">
                             <tr>
-                                <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase"><button onClick={() => requestSort('anggotaNama')} className="flex items-center">Nama <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
-                                <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase"><button onClick={() => requestSort('anggotaUnit')} className="flex items-center">Unit <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
+                                <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Nama</th>
                                 <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Barang</th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase"><button onClick={() => requestSort('harga_jual')} className="flex items-center">Total Pembiayaan <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase"><button onClick={() => requestSort('cicilan_per_bulan')} className="flex items-center">Angsuran <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
-                                <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase"><button onClick={() => requestSort('cicilan_terbayar')} className="flex items-center">Terbayar <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase"><button onClick={() => requestSort('sisaHutang')} className="flex items-center">Sisa Cicilan <ArrowDownUpIcon className="w-3 h-3 ml-1" /></button></th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Harga Pokok</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">DP</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Margin</th>
+                                <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Tenor</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angsuran</th>
+                                <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Terbayar</th>
                                 <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {loading ? (<tr><td colSpan={8} className="p-6 text-center">Memuat data...</td></tr>)
-                            : sortedAndFilteredContracts.length === 0 ? (<tr><td colSpan={8} className="text-center py-10 text-gray-500">Tidak ada data untuk filter yang dipilih.</td></tr>)
+                            {loading ? (<tr><td colSpan={9} className="p-6 text-center">Memuat data...</td></tr>)
+                            : sortedAndFilteredContracts.length === 0 ? (<tr><td colSpan={9} className="text-center py-10 text-gray-500">Tidak ada data untuk filter yang dipilih.</td></tr>)
                             : sortedAndFilteredContracts.map((kontrak) => (
                                 <tr key={kontrak.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{kontrak.anggotaNama}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-gray-500">{kontrak.anggotaUnit}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-gray-500">{kontrak.nama_barang}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.harga_jual)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.harga_pokok)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.uang_muka || 0)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.margin)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.tenor} bln</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar} / {kontrak.tenor}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right font-bold text-gray-800">{formatCurrency(kontrak.sisaHutang)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-center font-medium space-x-2">
-                                        <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
-                                        <button onClick={() => handleDeleteKontrak(kontrak.id)} className="text-red-600 hover:text-red-800">Hapus</button>
-                                    </td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-center font-medium space-x-2">
-                                        <button onClick={() => setViewingHistoryKontrak(kontrak)} className="text-gray-600 hover:text-gray-900">Riwayat</button>
-                                        <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
-                                        <button onClick={() => handleDeleteKontrak(kontrak.id)} className="text-red-600 hover:text-red-800">Hapus</button>
+                                    <td className="px-4 py-2 whitespace-nowrap text-center font-medium">
+                                        <button onClick={() => setViewingHistoryKontrak(kontrak)} className="text-primary hover:underline">
+                                            Lihat Riwayat
+                                        </button>
                                     </td>
                                 </tr>
                             ))}
@@ -224,22 +217,32 @@ const Murabahah: React.FC = () => {
                     </table>
                 </div>
             </Card>
+
             <Modal isOpen={isFormModalOpen} onClose={handleCloseFormModal} title={editingKontrak ? 'Edit Kontrak Murabahah' : 'Pengajuan Murabahah Baru'}>
                 <MurabahahForm onSave={handleSaveKontrak} onClose={handleCloseFormModal} anggotaList={anggotaList} initialData={editingKontrak} />
             </Modal>
+            
             <Modal isOpen={isImportModalOpen} onClose={handleCloseImportModal} title="Impor Kontrak Murabahah dari CSV">
                 <MurabahahImporter onClose={handleCloseImportModal} onImportSuccess={handleCloseImportModal} anggotaList={anggotaList} />
             </Modal>
+
             <Modal 
                 isOpen={!!viewingHistoryKontrak} 
                 onClose={() => setViewingHistoryKontrak(null)} 
-                title={`Riwayat Pembayaran - ${viewingHistoryKontrak?.nama_barang}`}
+                title={`Riwayat: ${viewingHistoryKontrak?.nama_barang}`}
             >
-                {viewingHistoryKontrak && <MurabahahHistory kontrakId={viewingHistoryKontrak.id} />}
+                {viewingHistoryKontrak && 
+                    <MurabahahHistory 
+                        kontrak={viewingHistoryKontrak}
+                        onEdit={handleOpenFormModal}
+                        onDelete={handleDeleteKontrak}
+                    />
+                }
             </Modal>
         </>
     );
 };
 
 export default Murabahah;
+
 
