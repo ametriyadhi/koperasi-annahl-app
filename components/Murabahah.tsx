@@ -5,6 +5,7 @@ import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak, Unit } from '../types';
 import Card from './shared/Card';
 import Modal from './shared/Modal';
+import MurabahahHistory from './MurabahahHistory';
 import MurabahahForm from './MurabahahForm';
 import MurabahahImporter from './MurabahahImporter';
 import { PlusCircleIcon, ArrowDownUpIcon } from './icons';
@@ -33,6 +34,7 @@ const Murabahah: React.FC = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [unitFilter, setUnitFilter] = useState('Semua');
     const [sortConfig, setSortConfig] = useState<SortConfig | null>(null);
+    const [viewingHistoryKontrak, setViewingHistoryKontrak] = useState<KontrakMurabahah | null>(null);
 
     useEffect(() => {
         const unsubAnggota = onSnapshot(collection(db, "anggota"), (snapshot) => {
@@ -211,6 +213,11 @@ const Murabahah: React.FC = () => {
                                         <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
                                         <button onClick={() => handleDeleteKontrak(kontrak.id)} className="text-red-600 hover:text-red-800">Hapus</button>
                                     </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-center font-medium space-x-2">
+                                        <button onClick={() => setViewingHistoryKontrak(kontrak)} className="text-gray-600 hover:text-gray-900">Riwayat</button>
+                                        <button onClick={() => handleOpenFormModal(kontrak)} className="text-primary hover:text-amber-600">Edit</button>
+                                        <button onClick={() => handleDeleteKontrak(kontrak.id)} className="text-red-600 hover:text-red-800">Hapus</button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -223,11 +230,16 @@ const Murabahah: React.FC = () => {
             <Modal isOpen={isImportModalOpen} onClose={handleCloseImportModal} title="Impor Kontrak Murabahah dari CSV">
                 <MurabahahImporter onClose={handleCloseImportModal} onImportSuccess={handleCloseImportModal} anggotaList={anggotaList} />
             </Modal>
+            <Modal 
+                isOpen={!!viewingHistoryKontrak} 
+                onClose={() => setViewingHistoryKontrak(null)} 
+                title={`Riwayat Pembayaran - ${viewingHistoryKontrak?.nama_barang}`}
+            >
+                {viewingHistoryKontrak && <MurabahahHistory kontrakId={viewingHistoryKontrak.id} />}
+            </Modal>
         </>
     );
 };
 
 export default Murabahah;
-
-
 
