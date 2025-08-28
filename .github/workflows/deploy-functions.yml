@@ -1,0 +1,33 @@
+name: Deploy Firebase Functions
+
+on:
+  push:
+    branches:
+      - main # Ganti ke 'master' jika itu branch utama Anda
+    paths:
+      - 'functions/**' # Hanya berjalan jika ada perubahan di folder functions
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Install Dependencies for Functions
+        run: npm --prefix functions install
+
+      - name: Deploy to Firebase Functions
+        uses: w9jds/firebase-action@master
+        with:
+          action: deploy
+          args: --only functions
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          PROJECT_ID: koperasi-annahl-app
