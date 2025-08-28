@@ -19,7 +19,14 @@ const tabs = [
     StatusKontrak.AKAD, StatusKontrak.LUNAS, StatusKontrak.MACET,
 ];
 
-type CombinedKontrak = KontrakMurabahah & { anggotaNama: string; anggotaUnit: Unit; sisaHutang: number; };
+// Tipe data diperkaya dengan rincian angsuran
+type CombinedKontrak = KontrakMurabahah & { 
+    anggotaNama: string; 
+    anggotaUnit: Unit; 
+    sisaHutang: number;
+    angsuranPokok: number;
+    angsuranMargin: number;
+};
 type SortConfig = { key: keyof CombinedKontrak; direction: 'ascending' | 'descending'; };
 
 const Murabahah: React.FC = () => {
@@ -51,11 +58,16 @@ const Murabahah: React.FC = () => {
         let combinedData: CombinedKontrak[] = kontrakList.map(kontrak => {
             const anggota = anggotaMap.get(kontrak.anggota_id);
             const sisaHutang = Math.max(0, (kontrak.harga_jual || 0) - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
+            // --- KALKULASI BARU UNTUK RINCIAN ANGSURAN ---
+            const angsuranPokok = kontrak.tenor > 0 ? (kontrak.harga_pokok - (kontrak.uang_muka || 0)) / kontrak.tenor : 0;
+            const angsuranMargin = kontrak.tenor > 0 ? (kontrak.margin || 0) / kontrak.tenor : 0;
             return {
                 ...kontrak,
                 anggotaNama: anggota?.nama || 'N/A',
                 anggotaUnit: anggota?.unit || Unit.Supporting,
-                sisaHutang: sisaHutang,
+                sisaHutang,
+                angsuranPokok,
+                angsuranMargin,
             };
         });
         combinedData = combinedData.filter(k => {
@@ -94,11 +106,12 @@ const Murabahah: React.FC = () => {
     };
 
     const handleExportCsv = () => {
-        const headers = ['Nama Anggota', 'Unit', 'Nama Barang', 'Tgl Realisasi', 'Tenor', 'Harga Pokok', 'Margin', 'Total Pembiayaan', 'Angsuran/Bln', 'Terbayar', 'Sisa Hutang'];
+        // --- HEADER CSV DIPERBARUI ---
+        const headers = ['Nama Anggota', 'Unit', 'Nama Barang', 'Total Pembiayaan', 'Angsuran Pokok', 'Angsuran Margin', 'Total Angsuran', 'Tenor', 'Terbayar', 'Sisa Cicilan'];
         const csvRows = sortedAndFilteredContracts.map(k => 
-            [`"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`, new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
-                k.tenor, Math.round(k.harga_pokok), Math.round(k.margin), Math.round(k.harga_jual), 
-                Math.round(k.cicilan_per_bulan), k.cicilan_terbayar, Math.round(k.sisaHutang)
+            [`"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`,
+                Math.round(k.harga_jual), Math.round(k.angsuranPokok), Math.round(k.angsuranMargin),
+                Math.round(k.cicilan_per_bulan), k.tenor, k.cicilan_terbayar, Math.round(k.sisaHutang)
             ].join(',')
         );
         const csvContent = [headers.join(','), ...csvRows].join('\n');
@@ -172,32 +185,35 @@ const Murabahah: React.FC = () => {
                 </div>
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 text-xs">
+                        {/* --- HEADER TABEL DIPERBARUI --- */}
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Nama</th>
                                 <th className="px-4 py-2 text-left font-medium text-gray-500 uppercase">Barang</th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Harga Pokok</th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">DP</th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Margin</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Total Pembiayaan</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angsuran Pokok</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angsuran Margin</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Total Angsuran</th>
                                 <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Tenor</th>
-                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Angsuran</th>
                                 <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Terbayar</th>
+                                <th className="px-4 py-2 text-right font-medium text-gray-500 uppercase">Sisa Cicilan</th>
                                 <th className="px-4 py-2 text-center font-medium text-gray-500 uppercase">Aksi</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {loading ? (<tr><td colSpan={9} className="p-6 text-center">Memuat data...</td></tr>)
-                            : sortedAndFilteredContracts.length === 0 ? (<tr><td colSpan={9} className="text-center py-10 text-gray-500">Tidak ada data untuk filter yang dipilih.</td></tr>)
+                            {loading ? (<tr><td colSpan={10} className="p-6 text-center">Memuat data...</td></tr>)
+                            : sortedAndFilteredContracts.length === 0 ? (<tr><td colSpan={10} className="text-center py-10 text-gray-500">Tidak ada data untuk filter yang dipilih.</td></tr>)
                             : sortedAndFilteredContracts.map((kontrak) => (
                                 <tr key={kontrak.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-2 whitespace-nowrap font-medium text-gray-900">{kontrak.anggotaNama}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-gray-500">{kontrak.nama_barang}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.harga_pokok)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.uang_muka || 0)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.margin)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.tenor} bln</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.harga_jual)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.angsuranPokok)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right text-gray-500">{formatCurrency(kontrak.angsuranMargin)}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-right font-semibold text-gray-700">{formatCurrency(kontrak.cicilan_per_bulan)}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar} / {kontrak.tenor}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.tenor} bln</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-right font-bold text-gray-800">{formatCurrency(kontrak.sisaHutang)}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-center font-medium">
                                         <button onClick={() => setViewingHistoryKontrak(kontrak)} className="text-primary hover:underline">
                                             Riwayat & Aksi
@@ -236,6 +252,7 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
 
 
