@@ -1,32 +1,119 @@
+import * as functions from "firebase-functions";
+import * as admin from "firebase-admin";
+
+admin.initializeApp();
+
+interface UserToCreate {
+  email: string;
+  password?: string; // Password sekarang opsional
+  nama: string;
+  nip: string;
+  unit: string;
+  tgl_gabung: string;
+  status: "Aktif" | "Tidak Aktif";
+  simpanan_pokok: number;
+  simpanan_wajib: number;
+  simpanan_sukarela: number;
+}
+
 /**
- * Import function triggers from their respective submodules:
- *
- * import {onCall} from "firebase-functions/v2/https";
- * import {onDocumentWritten} from "firebase-functions/v2/firestore";
- *
- * See a full list of supported triggers at https://firebase.google.com/docs/functions
+ * Cloud Function untuk membuat atau memperbarui pengguna secara massal.
+ * Fungsi ini akan memeriksa NIP, jika sudah ada maka akan update, jika tidak ada maka akan membuat baru.
  */
+export const bulkCreateUsers = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "Anda harus login untuk melakukan aksi ini."
+    );
+  }
 
-import {setGlobalOptions} from "firebase-functions";
-import {onRequest} from "firebase-functions/https";
-import * as logger from "firebase-functions/logger";
+  const users = data.users as UserToCreate[];
+  if (!users || !Array.isArray(users)) {
+    throw new functions.https.HttpsError(
+      "invalid-argument",
+      "Data yang dikirim harus berupa array 'users'."
+    );
+  }
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+  const results = {
+    successCreateCount: 0,
+    successUpdateCount: 0, // Menambahkan counter untuk update
+    errorCount: 0,
+    errors: [] as { nip: string; email: string; reason: string }[],
+  };
 
-// For cost control, you can set the maximum number of containers that can be
-// running at the same time. This helps mitigate the impact of unexpected
-// traffic spikes by instead downgrading performance. This limit is a
-// per-function limit. You can override the limit for each function using the
-// `maxInstances` option in the function's options, e.g.
-// `onRequest({ maxInstances: 5 }, (req, res) => { ... })`.
-// NOTE: setGlobalOptions does not apply to functions using the v1 API. V1
-// functions should each use functions.runWith({ maxInstances: 10 }) instead.
-// In the v1 API, each function can only serve one request per container, so
-// this will be the maximum concurrent request count.
-setGlobalOptions({ maxInstances: 10 });
+  const db = admin.firestore();
+  const auth = admin.auth();
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+  for (const user of users) {
+    try {
+      // --- LOGIKA BARU: Cek apakah anggota dengan NIP ini sudah ada ---
+      const anggotaQuery = await db
+        .collection("anggota")
+        .where("nip", "==", user.nip)
+        .limit(1)
+        .get();
+
+      const anggotaData = {
+        nama: user.nama,
+        nip: user.nip,
+        unit: user.unit,
+        tgl_gabung: user.tgl_gabung,
+        status: user.status,
+        simpanan_pokok: user.simpanan_pokok,
+        simpanan_wajib: user.simpanan_wajib,
+        simpanan_sukarela: user.simpanan_sukarela,
+      };
+
+      if (!anggotaQuery.empty) {
+        // --- JIKA ANGGOTA SUDAH ADA: LAKUKAN UPDATE ---
+        const existingAnggotaDoc = anggotaQuery.docs[0];
+        await existingAnggotaDoc.ref.update(anggotaData);
+        results.successUpdateCount++;
+      } else {
+        // --- JIKA ANGGOTA BELUM ADA: LAKUKAN CREATE ---
+        if (!user.password || user.password.length < 6) {
+            throw new Error("Password wajib diisi (min. 6 karakter) untuk anggota baru.");
+        }
+        
+        try {
+            await auth.getUserByEmail(user.email);
+            throw new Error(`Email ${user.email} sudah terdaftar.`);
+        } catch (error: any) {
+            if (error.code !== 'auth/user-not-found') {
+                throw error;
+            }
+        }
+
+        const userRecord = await auth.createUser({
+          email: user.email,
+          password: user.password,
+          displayName: user.nama,
+          disabled: false,
+        });
+
+        const anggotaRef = await db.collection("anggota").add(anggotaData);
+
+        await db.collection("users").doc(userRecord.uid).set({
+          uid: userRecord.uid,
+          email: user.email,
+          role: "anggota",
+          anggota_id: anggotaRef.id,
+        });
+
+        results.successCreateCount++;
+      }
+    } catch (error: any) {
+      results.errorCount++;
+      results.errors.push({
+        nip: user.nip,
+        email: user.email,
+        reason: error.message || "Terjadi kesalahan tidak diketahui.",
+      });
+    }
+  }
+
+  return results;
+});
+
