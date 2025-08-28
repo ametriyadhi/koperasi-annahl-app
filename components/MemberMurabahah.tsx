@@ -86,7 +86,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                     <div className="flex space-x-2">
                         {/* --- TOMBOL BARU DITAMBAHKAN --- */}
                         <button onClick={() => setIsTermsModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-primary text-sm font-medium rounded-md">
-                            S & K
+                            Syarat & Ketentuan
                         </button>
                         <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md">
                             {showForm ? 'Tutup' : '+ Ajukan'}
@@ -150,7 +150,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                             <ul className="list-[lower-alpha] list-inside pl-4 mt-1 space-y-1">
                                 <li>Besaran plafon yang diajukan maksimal <strong>5x gaji</strong> yang diterima pegawai.</li>
                                 <li>Cicilan atau potongan maksimal <strong>1/3 dari gaji</strong> yang diterima pegawai.</li>
-                                <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama 1-2 tahun lebih, lama cicilannya maksimal <strong>12 bulan</strong>.</li>
+                                <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama 1-2 tahun, lama cicilannya maksimal <strong>12 bulan</strong>.</li>
                                 <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama lebih dari 2 tahun, lama cicilannya maksimal <strong>24 bulan</strong>.</li>
                             </ul>
                         </li>
