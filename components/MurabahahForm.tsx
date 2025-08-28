@@ -121,7 +121,7 @@ const MurabahahForm: React.FC<MurabahahFormProps> = ({ onSave, onClose, anggotaL
         <div>
           <label className="block text-sm font-medium text-gray-700">Tenor (Bulan)</label>
           <select name="tenor" value={formData.tenor} onChange={handleChange} className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3">
-             {Array.from({ length: 36 }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
+             {Array.from({ length: 24 }, (_, i) => i + 1).map(bln => <option key={bln} value={bln}>{bln} Bulan</option>)}
           </select>
         </div>
          <div>
