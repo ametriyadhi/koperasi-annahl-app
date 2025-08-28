@@ -41,6 +41,18 @@ export interface Akun {
   saldo: number;
 }
 
+export interface TransaksiMurabahah {
+  id: string;
+  kontrak_id: string;
+  anggota_id: string;
+  tanggal: string;
+  angsuran_ke: number;
+  jumlah_pokok: number;
+  jumlah_margin: number;
+  jumlah_bayar: number;
+  keterangan: string;
+}
+
 export interface ReportRow {
   nip: string; nama: string; simpananWajib: number; cicilanMurabahah: number; totalPotongan: number;
 }
