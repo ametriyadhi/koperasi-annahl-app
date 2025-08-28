@@ -19,7 +19,6 @@ const tabs = [
     StatusKontrak.AKAD, StatusKontrak.LUNAS, StatusKontrak.MACET,
 ];
 
-// Tipe untuk data yang digabungkan dan konfigurasi pengurutan
 type CombinedKontrak = KontrakMurabahah & { anggotaNama: string; anggotaUnit: Unit; sisaHutang: number; };
 type SortConfig = { key: keyof CombinedKontrak; direction: 'ascending' | 'descending'; };
 
@@ -49,7 +48,6 @@ const Murabahah: React.FC = () => {
     
     const sortedAndFilteredContracts = useMemo(() => {
         const anggotaMap = new Map(anggotaList.map(a => [a.id, a]));
-
         let combinedData: CombinedKontrak[] = kontrakList.map(kontrak => {
             const anggota = anggotaMap.get(kontrak.anggota_id);
             const sisaHutang = Math.max(0, (kontrak.harga_jual || 0) - ((kontrak.cicilan_terbayar || 0) * (kontrak.cicilan_per_bulan || 0)));
@@ -60,8 +58,6 @@ const Murabahah: React.FC = () => {
                 sisaHutang: sisaHutang,
             };
         });
-
-        // Filtering
         combinedData = combinedData.filter(k => {
             const statusMatch = k.status === activeTab;
             const unitMatch = unitFilter === 'Semua' || k.anggotaUnit === unitFilter;
@@ -70,8 +66,6 @@ const Murabahah: React.FC = () => {
                                 k.nama_barang.toLowerCase().includes(searchTerm.toLowerCase());
             return statusMatch && unitMatch && searchMatch;
         });
-
-        // Sorting
         if (sortConfig !== null) {
             combinedData.sort((a, b) => {
                 const valA = a[sortConfig.key];
@@ -81,7 +75,6 @@ const Murabahah: React.FC = () => {
                 return 0;
             });
         } else {
-            // Default sort
             const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
             combinedData.sort((a, b) => {
                 const unitComp = unitOrder.indexOf(a.anggotaUnit) - unitOrder.indexOf(b.anggotaUnit);
@@ -103,8 +96,7 @@ const Murabahah: React.FC = () => {
     const handleExportCsv = () => {
         const headers = ['Nama Anggota', 'Unit', 'Nama Barang', 'Tgl Realisasi', 'Tenor', 'Harga Pokok', 'Margin', 'Total Pembiayaan', 'Angsuran/Bln', 'Terbayar', 'Sisa Hutang'];
         const csvRows = sortedAndFilteredContracts.map(k => 
-            [
-                `"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`, new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
+            [`"${k.anggotaNama}"`, k.anggotaUnit, `"${k.nama_barang}"`, new Date(k.tanggal_akad).toLocaleDateString('id-ID'),
                 k.tenor, Math.round(k.harga_pokok), Math.round(k.margin), Math.round(k.harga_jual), 
                 Math.round(k.cicilan_per_bulan), k.cicilan_terbayar, Math.round(k.sisaHutang)
             ].join(',')
@@ -208,7 +200,7 @@ const Murabahah: React.FC = () => {
                                     <td className="px-4 py-2 whitespace-nowrap text-center text-gray-500">{kontrak.cicilan_terbayar} / {kontrak.tenor}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-center font-medium">
                                         <button onClick={() => setViewingHistoryKontrak(kontrak)} className="text-primary hover:underline">
-                                            Lihat Riwayat
+                                            Riwayat & Aksi
                                         </button>
                                     </td>
                                 </tr>
@@ -244,5 +236,6 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
 
