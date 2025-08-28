@@ -2,11 +2,10 @@ import React, { useState } from 'react';
 import { collection, getDocs, query, where, doc, writeBatch, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import type { Anggota, KontrakMurabahah } from '../types';
-import { Unit, StatusKontrak, JenisSimpanan } from '../types'; // JenisSimpanan ditambahkan
+import { Unit, StatusKontrak, JenisSimpanan } from '../types';
 import { useSettings } from './SettingsContext';
 import Card from './shared/Card';
 
-// Tipe data baru yang lebih fleksibel untuk laporan CSV
 interface AutodebetReportRow {
   nama: string;
   unit: Unit | string;
@@ -17,10 +16,23 @@ interface AutodebetReportRow {
   total: number;
 }
 
-// Tipe data untuk menyimpan data yang akan diproses
+// Tipe data diperkaya untuk membawa semua info yang dibutuhkan
+interface KontrakProcessInfo {
+  id: string;
+  anggotaId: string;
+  nama_barang: string;
+  harga_pokok: number;
+  margin: number;
+  tenor: number;
+  uang_muka: number;
+  cicilan_per_bulan: number;
+  newCicilanTerbayar: number;
+  newStatus: StatusKontrak;
+}
+
 interface ProcessData {
   anggotaToUpdate: { id: string, newSimpananWajib: number }[];
-  kontrakToUpdate: { id: string, newCicilanTerbayar: number, newStatus: StatusKontrak }[];
+  kontrakToUpdate: KontrakProcessInfo[];
   csvContent: string;
   reportName: string;
 }
@@ -30,7 +42,6 @@ const MonthlyProcess: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [processData, setProcessData] = useState<ProcessData | null>(null);
 
-  // FUNGSI 1: HANYA UNTUK MEMBUAT & MENGUNDUH LAPORAN (READ-ONLY)
   const generateReport = async () => {
     setIsLoading(true);
     setProcessData(null);
@@ -92,6 +103,13 @@ const MonthlyProcess: React.FC = () => {
 
                   dataForProcessing.kontrakToUpdate.push({
                       id: kontrak.id,
+                      anggotaId: anggota.id,
+                      nama_barang: kontrak.nama_barang,
+                      harga_pokok: kontrak.harga_pokok,
+                      margin: kontrak.margin,
+                      tenor: kontrak.tenor,
+                      uang_muka: kontrak.uang_muka || 0,
+                      cicilan_per_bulan: kontrak.cicilan_per_bulan,
                       newCicilanTerbayar: angsuranKe,
                       newStatus: angsuranKe >= kontrak.tenor ? StatusKontrak.LUNAS : kontrak.status,
                   });
@@ -126,7 +144,6 @@ const MonthlyProcess: React.FC = () => {
     }
   };
 
-  // FUNGSI 2: HANYA UNTUK MENULIS PERUBAHAN KE DATABASE (WRITE-ONLY)
   const executeProcess = async () => {
     if (!processData) {
       alert("Silakan buat laporan terlebih dahulu.");
@@ -140,14 +157,12 @@ const MonthlyProcess: React.FC = () => {
     try {
       const batch = writeBatch(db);
       const currentDate = new Date();
-      const keterangan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long' })}`;
+      const keteranganSimpanan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long' })}`;
 
-      // Update simpanan anggota & BUAT CATATAN TRANSAKSI
       processData.anggotaToUpdate.forEach(item => {
         const anggotaRef = doc(db, "anggota", item.id);
         batch.update(anggotaRef, { simpanan_wajib: item.newSimpananWajib });
 
-        // --- PENAMBAHAN: Buat dokumen baru di sub-koleksi transaksi ---
         const transaksiRef = doc(collection(db, "anggota", item.id, "transaksi"));
         batch.set(transaksiRef, {
             anggota_id: item.id,
@@ -155,18 +170,32 @@ const MonthlyProcess: React.FC = () => {
             tanggal: currentDate.toISOString(),
             tipe: 'Setor',
             jumlah: settings.simpanan_wajib || 50000,
-            keterangan: keterangan,
+            keterangan: keteranganSimpanan,
         });
-        // --- AKHIR PENAMBAHAN ---
       });
 
-      // Update angsuran kontrak
+      // --- PERBAIKAN LOGIKA PENCATATAN TRANSAKSI MURABAHAH ---
       processData.kontrakToUpdate.forEach(item => {
-        const ref = doc(db, "kontrak_murabahah", item.id);
-        batch.update(ref, { cicilan_terbayar: item.newCicilanTerbayar, status: item.newStatus });
+        const kontrakRef = doc(db, "kontrak_murabahah", item.id);
+        batch.update(kontrakRef, { cicilan_terbayar: item.newCicilanTerbayar, status: item.newStatus });
+
+        const cicilanPokok = (item.harga_pokok - item.uang_muka) / item.tenor;
+        const cicilanMargin = item.margin / item.tenor;
+        const keteranganMurabahah = `Angsuran ke-${item.newCicilanTerbayar} (${item.nama_barang})`;
+
+        const transaksiRef = doc(collection(db, "kontrak_murabahah", item.id, "transaksi"));
+        batch.set(transaksiRef, {
+            kontrak_id: item.id,
+            anggota_id: item.anggotaId,
+            tanggal: currentDate.toISOString(),
+            angsuran_ke: item.newCicilanTerbayar,
+            jumlah_pokok: cicilanPokok,
+            jumlah_margin: cicilanMargin,
+            jumlah_bayar: item.cicilan_per_bulan,
+            keterangan: keteranganMurabahah,
+        });
       });
 
-      // Simpan laporan ke arsip
       const arsipRef = doc(collection(db, "laporan_arsip"));
       batch.set(arsipRef, {
           namaLaporan: processData.reportName,
