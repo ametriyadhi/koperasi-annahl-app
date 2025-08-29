@@ -5,7 +5,7 @@ import type { Anggota, KontrakMurabahah } from '../types';
 import { StatusKontrak } from '../types';
 import { useSettings } from './SettingsContext';
 import MurabahahHistory from './MurabahahHistory';
-import Modal from './shared/Modal'; // Impor komponen Modal
+import Modal from './shared/Modal';
 
 const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
@@ -20,9 +20,14 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
     const [pengajuanList, setPengajuanList] = useState<KontrakMurabahah[]>([]);
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ nama_barang: '', harga_pokok: 0, tenor: 12 });
-    const [expandedKontrakId, setExpandedKontrakId] = useState<string | null>(null);
-    // --- STATE BARU UNTUK MODAL SYARAT & KETENTUAN ---
+    // --- PENAMBAHAN: uang_muka ditambahkan ke state form ---
+    const [formData, setFormData] = useState({ 
+        nama_barang: '', 
+        harga_pokok: 0, 
+        uang_muka: 0, // State baru untuk DP
+        tenor: 12 
+    });
+    const [expandedKontrak, setExpandedKontrak] = useState<KontrakMurabahah | null>(null);
     const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
     useEffect(() => {
@@ -42,8 +47,12 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
             alert("Nama barang dan jumlah pengajuan harus diisi.");
             return;
         }
+        if (formData.uang_muka < 0) {
+            alert("Uang muka tidak boleh negatif.");
+            return;
+        }
 
-        const { harga_pokok, tenor } = formData;
+        const { harga_pokok, tenor, uang_muka } = formData;
         let marginPersen;
         if (tenor <= 6) marginPersen = settings.margin_tenor_6;
         else if (tenor <= 12) marginPersen = settings.margin_tenor_12;
@@ -52,7 +61,8 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
 
         const margin = harga_pokok * (marginPersen / 100);
         const harga_jual = harga_pokok + margin;
-        const cicilan_per_bulan = harga_jual / tenor;
+        // --- PERBAIKAN: Kalkulasi cicilan sekarang memperhitungkan DP ---
+        const cicilan_per_bulan = (harga_jual - uang_muka) / tenor;
 
         const newKontrak: Omit<KontrakMurabahah, 'id'> = {
             anggota_id: anggota.id,
@@ -60,7 +70,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
             harga_pokok,
             margin,
             harga_jual,
-            uang_muka: 0,
+            uang_muka, // DP dimasukkan
             tenor,
             cicilan_per_bulan,
             tanggal_akad: new Date().toISOString(),
@@ -71,11 +81,11 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
         await addDoc(collection(db, "kontrak_murabahah"), newKontrak);
         alert("Pengajuan berhasil dikirim dan akan segera ditinjau oleh pengurus.");
         setShowForm(false);
-        setFormData({ nama_barang: '', harga_pokok: 0, tenor: 12 });
+        setFormData({ nama_barang: '', harga_pokok: 0, uang_muka: 0, tenor: 12 });
     };
 
-    const toggleHistory = (kontrakId: string) => {
-        setExpandedKontrakId(prevId => (prevId === kontrakId ? null : kontrakId));
+    const toggleHistory = (kontrak: KontrakMurabahah) => {
+        setExpandedKontrak(prev => (prev?.id === kontrak.id ? null : kontrak));
     };
 
     return (
@@ -84,9 +94,8 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                 <div className="flex justify-between items-center">
                     <h2 className="text-xl font-bold text-primary">Pembiayaan Saya</h2>
                     <div className="flex space-x-2">
-                        {/* --- TOMBOL BARU DITAMBAHKAN --- */}
                         <button onClick={() => setIsTermsModalOpen(true)} className="px-4 py-2 bg-white border border-gray-300 text-primary text-sm font-medium rounded-md">
-                            Syarat & Ketentuan
+                            S & K
                         </button>
                         <button onClick={() => setShowForm(!showForm)} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md">
                             {showForm ? 'Tutup' : '+ Ajukan'}
@@ -104,6 +113,11 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                             <div>
                                 <label className="block text-sm font-medium">Jumlah Pengajuan / Harga Barang (Rp)</label>
                                 <input type="number" value={formData.harga_pokok || ''} onChange={e => setFormData({...formData, harga_pokok: Number(e.target.value)})} className="w-full p-2 mt-1 border rounded" placeholder="cth: 10000000" />
+                            </div>
+                            {/* --- KOLOM BARU UNTUK DP --- */}
+                            <div>
+                                <label className="block text-sm font-medium">Uang Muka / DP (Rp)</label>
+                                <input type="number" value={formData.uang_muka || ''} onChange={e => setFormData({...formData, uang_muka: Number(e.target.value)})} className="w-full p-2 mt-1 border rounded" placeholder="Isi 0 jika tanpa DP" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium">Jangka Waktu (Tenor)</label>
@@ -126,20 +140,20 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                                 </div>
                                 <span className="text-xs font-semibold bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">{p.status}</span>
                             </div>
-                            <button onClick={() => toggleHistory(p.id)} className="text-sm text-primary font-semibold mt-2">
-                                {expandedKontrakId === p.id ? 'Tutup Riwayat' : 'Lihat Riwayat Pembayaran'}
+                            <button onClick={() => toggleHistory(p)} className="text-sm text-primary font-semibold mt-2">
+                                {expandedKontrak?.id === p.id ? 'Tutup Riwayat' : 'Lihat Riwayat Pembayaran'}
                             </button>
                         </div>
-                        {expandedKontrakId === p.id && (
+                        {expandedKontrak?.id === p.id && (
                             <div className="border-t">
-                                <MurabahahHistory kontrakId={p.id} />
+                                {/* --- PERBAIKAN: Melewatkan seluruh objek kontrak --- */}
+                                <MurabahahHistory kontrak={expandedKontrak} />
                             </div>
                         )}
                     </div>
                 ))}
             </div>
 
-            {/* --- MODAL BARU UNTUK MENAMPILKAN S&K --- */}
             <Modal isOpen={isTermsModalOpen} onClose={() => setIsTermsModalOpen(false)} title="Syarat dan Ketentuan Murabahah">
                 <div className="text-sm text-gray-700 space-y-4">
                     <ol className="list-decimal list-inside space-y-2">
@@ -150,7 +164,7 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
                             <ul className="list-[lower-alpha] list-inside pl-4 mt-1 space-y-1">
                                 <li>Besaran plafon yang diajukan maksimal <strong>5x gaji</strong> yang diterima pegawai.</li>
                                 <li>Cicilan atau potongan maksimal <strong>1/3 dari gaji</strong> yang diterima pegawai.</li>
-                                <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama 1-2 tahun, lama cicilannya maksimal <strong>12 bulan</strong>.</li>
+                                <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama 1-2 tahun lebih, lama cicilannya maksimal <strong>12 bulan</strong>.</li>
                                 <li>Pegawai yang sudah bekerja di An Nahl Islamic School selama lebih dari 2 tahun, lama cicilannya maksimal <strong>24 bulan</strong>.</li>
                             </ul>
                         </li>
@@ -171,5 +185,6 @@ const MemberMurabahah: React.FC<MemberMurabahahProps> = ({ anggota }) => {
 };
 
 export default MemberMurabahah;
+
 
 
