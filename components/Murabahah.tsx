@@ -19,7 +19,6 @@ const tabs = [
     StatusKontrak.AKAD, StatusKontrak.LUNAS, StatusKontrak.MACET,
 ];
 
-// Tipe data diperkaya dengan semua data yang dibutuhkan untuk tampilan dan sortir
 type CombinedKontrak = KontrakMurabahah & { 
     anggotaNama: string; 
     anggotaUnit: Unit; 
@@ -89,6 +88,18 @@ const Murabahah: React.FC = () => {
         }
         return combinedData;
     }, [kontrakList, anggotaList, activeTab, unitFilter, searchTerm, sortConfig]);
+
+    // --- KALKULASI TOTAL BARU ---
+    const tableTotals = useMemo(() => {
+        return sortedAndFilteredContracts.reduce((acc, k) => {
+            acc.harga_pokok += k.harga_pokok || 0;
+            acc.uang_muka += k.uang_muka || 0;
+            acc.margin += k.margin || 0;
+            acc.cicilan_per_bulan += k.cicilan_per_bulan || 0;
+            acc.sisaHutang += k.sisaHutang || 0;
+            return acc;
+        }, { harga_pokok: 0, uang_muka: 0, margin: 0, cicilan_per_bulan: 0, sisaHutang: 0 });
+    }, [sortedAndFilteredContracts]);
     
     const requestSort = (key: keyof CombinedKontrak) => {
         let direction: 'ascending' | 'descending' = 'ascending';
@@ -215,6 +226,20 @@ const Murabahah: React.FC = () => {
                                 </tr>
                             ))}
                         </tbody>
+                        {/* --- FOOTER BARU DENGAN TOTAL --- */}
+                        <tfoot className="bg-gray-50 border-t-2 font-bold">
+                            <tr>
+                                <td colSpan={3} className="px-4 py-2 text-right text-gray-700">Total (Hasil Filter)</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(tableTotals.harga_pokok)}</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(tableTotals.uang_muka)}</td>
+                                <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(tableTotals.margin)}</td>
+                                <td></td>
+                                <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(tableTotals.cicilan_per_bulan)}</td>
+                                <td></td>
+                                <td className="px-4 py-2 text-right text-gray-900">{formatCurrency(tableTotals.sisaHutang)}</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
             </Card>
@@ -245,6 +270,7 @@ const Murabahah: React.FC = () => {
 };
 
 export default Murabahah;
+
 
 
 
