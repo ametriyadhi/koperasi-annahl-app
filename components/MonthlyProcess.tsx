@@ -1,258 +1,284 @@
 import React, { useState } from 'react';
-import { collection, getDocs, query, where, doc, writeBatch, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, where, writeBatch, doc, addDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import type { Anggota, KontrakMurabahah } from '../types';
-import { Unit, StatusKontrak, JenisSimpanan } from '../types';
-import { useSettings } from './SettingsContext';
+import type { Anggota, KontrakMurabahah, ReportRow, LaporanArsip, TransaksiSimpanan, TransaksiMurabahah } from '../types';
+import { StatusKontrak, JenisSimpanan, Unit } from '../types';
 import Card from './shared/Card';
+import Papa from 'papaparse';
 
-interface AutodebetReportRow {
-  nama: string;
-  unit: Unit | string;
-  simpananWajib: number | string;
-  angsuranKe: number | string;
-  cicilanPokok: number;
-  cicilanMargin: number;
-  total: number;
-}
+const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+};
 
-// Tipe data diperkaya untuk membawa semua info yang dibutuhkan
-interface KontrakProcessInfo {
-  id: string;
-  anggotaId: string;
-  nama_barang: string;
-  harga_pokok: number;
-  margin: number;
-  tenor: number;
-  uang_muka: number;
-  cicilan_per_bulan: number;
-  newCicilanTerbayar: number;
-  newStatus: StatusKontrak;
-}
-
-interface ProcessData {
-  anggotaToUpdate: { id: string, newSimpananWajib: number }[];
-  kontrakToUpdate: KontrakProcessInfo[];
-  csvContent: string;
-  reportName: string;
+// Interface baru untuk data yang akan diproses dan di-generate
+interface ProcessedData {
+    anggota: Anggota;
+    kontrakList: KontrakMurabahah[];
+    simpananWajib: number;
+    totalCicilanPokok: number;
+    totalCicilanMargin: number;
+    totalPotongan: number;
 }
 
 const MonthlyProcess: React.FC = () => {
-  const { settings } = useSettings();
-  const [isLoading, setIsLoading] = useState(false);
-  const [processData, setProcessData] = useState<ProcessData | null>(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [processedData, setProcessedData] = useState<ProcessedData[] | null>(null);
 
-  const generateReport = async () => {
-    setIsLoading(true);
-    setProcessData(null);
-    try {
-      const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
-      const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", "Berjalan"));
-      
-      const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
-          getDocs(anggotaQuery),
-          getDocs(kontrakQuery),
-      ]);
-      
-      const anggotaAktif = anggotaSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Anggota));
-      const kontrakBerjalan = kontrakSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as KontrakMurabahah));
+    const generateReportData = async () => {
+        setIsLoading(true);
+        setProcessedData(null);
+        try {
+            // Tahap 1: Baca Semua Data
+            const anggotaQuery = query(collection(db, "anggota"), where("status", "==", "Aktif"));
+            const kontrakQuery = query(collection(db, "kontrak_murabahah"), where("status", "==", StatusKontrak.BERJALAN));
+            
+            const [anggotaSnapshot, kontrakSnapshot] = await Promise.all([
+                getDocs(anggotaQuery),
+                getDocs(kontrakQuery)
+            ]);
 
-      const kontrakByAnggota = new Map<string, KontrakMurabahah[]>();
-      kontrakBerjalan.forEach(k => {
-          const list = kontrakByAnggota.get(k.anggota_id) || [];
-          list.push(k);
-          kontrakByAnggota.set(k.anggota_id, list);
-      });
+            const anggotaAktif = anggotaSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Anggota));
+            const kontrakBerjalan = kontrakSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as KontrakMurabahah));
 
-      const unitOrder = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
-      anggotaAktif.sort((a, b) => {
-          const orderA = unitOrder.indexOf(a.unit);
-          const orderB = unitOrder.indexOf(b.unit);
-          if (orderA !== orderB) return orderA - orderB;
-          return a.nama.localeCompare(b.nama);
-      });
+            const kontrakMap = new Map<string, KontrakMurabahah[]>();
+            kontrakBerjalan.forEach(k => {
+                const list = kontrakMap.get(k.anggota_id) || [];
+                list.push(k);
+                kontrakMap.set(k.anggota_id, list);
+            });
 
-      let reportData: AutodebetReportRow[] = [];
-      let grandTotalSimpanan = 0, grandTotalPokok = 0, grandTotalMargin = 0;
-      
-      const dataForProcessing: ProcessData = { anggotaToUpdate: [], kontrakToUpdate: [], csvContent: '', reportName: '' };
+            // Tahap 2: Proses Data
+            const allProcessedData = anggotaAktif.map(anggota => {
+                const simpananWajib = settings.simpanan_wajib || 50000;
+                const kontrakList = kontrakMap.get(anggota.id) || [];
+                
+                let totalCicilanPokok = 0;
+                let totalCicilanMargin = 0;
 
-      anggotaAktif.forEach(anggota => {
-          const simpananWajib = settings.simpanan_wajib || 50000;
-          const kontrakAnggota = kontrakByAnggota.get(anggota.id) || [];
-          
-          grandTotalSimpanan += simpananWajib;
-          dataForProcessing.anggotaToUpdate.push({ id: anggota.id, newSimpananWajib: (anggota.simpanan_wajib || 0) + simpananWajib });
+                kontrakList.forEach(k => {
+                    const angsuranPokok = (k.harga_pokok - k.uang_muka) / k.tenor;
+                    const angsuranMargin = k.margin / k.tenor;
+                    totalCicilanPokok += angsuranPokok;
+                    totalCicilanMargin += angsuranMargin;
+                });
+                
+                const totalPotongan = simpananWajib + totalCicilanPokok + totalCicilanMargin;
 
-          if (kontrakAnggota.length > 0) {
-              kontrakAnggota.forEach((kontrak, index) => {
-                  const angsuranKe = (kontrak.cicilan_terbayar || 0) + 1;
-                  const cicilanPokok = (kontrak.harga_pokok - (kontrak.uang_muka || 0)) / kontrak.tenor;
-                  const cicilanMargin = (kontrak.margin || 0) / kontrak.tenor;
-                  
-                  grandTotalPokok += cicilanPokok;
-                  grandTotalMargin += cicilanMargin;
-                  
-                  reportData.push({
-                      nama: index === 0 ? anggota.nama : `    ↳ ${kontrak.nama_barang}`,
-                      unit: index === 0 ? anggota.unit : '',
-                      simpananWajib: index === 0 ? simpananWajib : '',
-                      angsuranKe, cicilanPokok, cicilanMargin,
-                      total: cicilanPokok + cicilanMargin + (index === 0 ? simpananWajib : 0),
-                  });
+                return {
+                    anggota,
+                    kontrakList,
+                    simpananWajib,
+                    totalCicilanPokok,
+                    totalCicilanMargin,
+                    totalPotongan,
+                };
+            });
+            
+            // Urutkan berdasarkan unit
+            const unitOrder: Unit[] = [Unit.PGTK, Unit.SD, Unit.SMP, Unit.SMA, Unit.Supporting, Unit.Manajemen];
+            allProcessedData.sort((a, b) => {
+                const unitComparison = unitOrder.indexOf(a.anggota.unit) - unitOrder.indexOf(b.anggota.unit);
+                if (unitComparison !== 0) return unitComparison;
+                return a.anggota.nama.localeCompare(b.anggota.nama);
+            });
 
-                  dataForProcessing.kontrakToUpdate.push({
-                      id: kontrak.id,
-                      anggotaId: anggota.id,
-                      nama_barang: kontrak.nama_barang,
-                      harga_pokok: kontrak.harga_pokok,
-                      margin: kontrak.margin,
-                      tenor: kontrak.tenor,
-                      uang_muka: kontrak.uang_muka || 0,
-                      cicilan_per_bulan: kontrak.cicilan_per_bulan,
-                      newCicilanTerbayar: angsuranKe,
-                      newStatus: angsuranKe >= kontrak.tenor ? StatusKontrak.LUNAS : kontrak.status,
-                  });
-              });
-          } else {
-              reportData.push({ nama: anggota.nama, unit: anggota.unit, simpananWajib, angsuranKe: '', cicilanPokok: 0, cicilanMargin: 0, total: simpananWajib });
-          }
-      });
-      
-      const headers = ['Nama', 'Unit', 'Simpanan Wajib', 'Angsuran Ke', 'Cicilan Pokok', 'Cicilan Margin', 'Total'];
-      const csvRows = reportData.map(row => [`"${row.nama}"`, row.unit, row.simpananWajib, row.angsuranKe, Math.round(row.cicilanPokok), Math.round(row.cicilanMargin), Math.round(row.total)].join(','));
-      const totalRow = ['"TOTAL"', '', Math.round(grandTotalSimpanan), '', Math.round(grandTotalPokok), Math.round(grandTotalMargin), Math.round(grandTotalSimpanan + grandTotalPokok + grandTotalMargin)].join(',');
-      
-      dataForProcessing.csvContent = [headers.join(','), ...csvRows, totalRow].join('\n');
-      dataForProcessing.reportName = `Laporan Autodebet - ${new Date().toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
-      
-      setProcessData(dataForProcessing);
+            setProcessedData(allProcessedData);
+            downloadCsv(allProcessedData);
 
-      const blob = new Blob([dataForProcessing.csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${dataForProcessing.reportName.replace(/ /g, '_')}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-    } catch (error: any) {
-      alert(`Gagal membuat laporan: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        } catch (error) {
+            console.error("Gagal membuat laporan: ", error);
+            alert("Terjadi kesalahan saat membuat laporan.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    const downloadCsv = (data: ProcessedData[]) => {
+        const csvRows: any[] = [];
+        const headers = ["Nama", "Unit", "Simpanan Wajib", "Angsuran Ke", "Cicilan Pokok", "Cicilan Margin", "Total"];
+        csvRows.push(headers);
 
-  const executeProcess = async () => {
-    if (!processData) {
-      alert("Silakan buat laporan terlebih dahulu.");
-      return;
-    }
-    if (!window.confirm("DATA AKAN DIUBAH PERMANEN. Apakah Anda yakin ingin melanjutkan?")) {
-        return;
-    }
+        let totalSimpananWajib = 0;
+        let totalPokokMurabahah = 0;
+        let totalMarginMurabahah = 0;
 
-    setIsLoading(true);
-    try {
-      const batch = writeBatch(db);
-      const currentDate = new Date();
-      const keteranganSimpanan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long' })}`;
-
-      processData.anggotaToUpdate.forEach(item => {
-        const anggotaRef = doc(db, "anggota", item.id);
-        batch.update(anggotaRef, { simpanan_wajib: item.newSimpananWajib });
-
-        const transaksiRef = doc(collection(db, "anggota", item.id, "transaksi"));
-        batch.set(transaksiRef, {
-            anggota_id: item.id,
-            jenis: JenisSimpanan.WAJIB,
-            tanggal: currentDate.toISOString(),
-            tipe: 'Setor',
-            jumlah: settings.simpanan_wajib || 50000,
-            keterangan: keteranganSimpanan,
+        data.forEach(item => {
+            totalSimpananWajib += item.simpananWajib;
+            totalPokokMurabahah += item.totalCicilanPokok;
+            totalMarginMurabahah += item.totalCicilanMargin;
+            
+            if (item.kontrakList.length === 0) {
+                 csvRows.push([
+                    item.anggota.nama,
+                    item.anggota.unit,
+                    item.simpananWajib,
+                    '', '', '',
+                    item.simpananWajib
+                ]);
+            } else {
+                item.kontrakList.forEach((k, index) => {
+                    const angsuranPokok = (k.harga_pokok - k.uang_muka) / k.tenor;
+                    const angsuranMargin = k.margin / k.tenor;
+                    csvRows.push([
+                        index === 0 ? item.anggota.nama : `  ↳ ${k.nama_barang}`,
+                        index === 0 ? item.anggota.unit : '',
+                        index === 0 ? item.simpananWajib : '',
+                        k.cicilan_terbayar + 1,
+                        Math.round(angsuranPokok),
+                        Math.round(angsuranMargin),
+                        Math.round(item.simpananWajib + item.totalCicilanPokok + item.totalCicilanMargin)
+                    ]);
+                });
+            }
         });
-      });
 
-      // --- PERBAIKAN LOGIKA PENCATATAN TRANSAKSI MURABAHAH ---
-      processData.kontrakToUpdate.forEach(item => {
-        const kontrakRef = doc(db, "kontrak_murabahah", item.id);
-        batch.update(kontrakRef, { cicilan_terbayar: item.newCicilanTerbayar, status: item.newStatus });
+        // Baris Total
+        csvRows.push([]); // Baris kosong
+        csvRows.push([
+            "TOTAL", "",
+            Math.round(totalSimpananWajib),
+            "",
+            Math.round(totalPokokMurabahah),
+            Math.round(totalMarginMurabahah),
+            Math.round(totalSimpananWajib + totalPokokMurabahah + totalMarginMurabahah)
+        ]);
 
-        const cicilanPokok = (item.harga_pokok - item.uang_muka) / item.tenor;
-        const cicilanMargin = item.margin / item.tenor;
-        const keteranganMurabahah = `Angsuran ke-${item.newCicilanTerbayar} (${item.nama_barang})`;
+        const csvString = Papa.unparse(csvRows);
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        const fileName = `Laporan_Autodebet_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.csv`;
+        link.setAttribute('download', fileName);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
 
-        const transaksiRef = doc(collection(db, "kontrak_murabahah", item.id, "transaksi"));
-        batch.set(transaksiRef, {
-            kontrak_id: item.id,
-            anggota_id: item.anggotaId,
-            tanggal: currentDate.toISOString(),
-            angsuran_ke: item.newCicilanTerbayar,
-            jumlah_pokok: cicilanPokok,
-            jumlah_margin: cicilanMargin,
-            jumlah_bayar: item.cicilan_per_bulan,
-            keterangan: keteranganMurabahah,
-        });
-      });
+    const executeProcess = async () => {
+        if (!processedData) {
+            alert("Buat laporan terlebih dahulu sebelum menjalankan proses.");
+            return;
+        }
+        if (!confirm("Apakah Anda yakin ingin menjalankan proses bulanan? Aksi ini akan mengubah data simpanan dan cicilan secara permanen dan tidak dapat diurungkan.")) {
+            return;
+        }
 
-      const arsipRef = doc(collection(db, "laporan_arsip"));
-      batch.set(arsipRef, {
-          namaLaporan: processData.reportName,
-          tanggalDibuat: new Date().toISOString(),
-          dataLaporan: processData.csvContent,
-      });
+        setIsLoading(true);
+        const batch = writeBatch(db);
+        const currentDate = new Date();
+        const keteranganSimpanan = `Setoran Wajib Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`;
 
-      await batch.commit();
-      alert("Proses bulanan berhasil dijalankan! Data simpanan, angsuran, dan riwayat transaksi telah diperbarui. Laporan juga telah diarsipkan.");
-      setProcessData(null);
-    } catch (error: any) {
-      alert(`Gagal menjalankan proses: ${error.message}`);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        try {
+            for (const item of processedData) {
+                const anggotaRef = doc(db, "anggota", item.anggota.id);
+                batch.update(anggotaRef, {
+                    simpanan_wajib: (item.anggota.simpanan_wajib || 0) + item.simpananWajib
+                });
 
-  return (
-    <Card title="Proses Bulanan & Generator Laporan Autodebet">
-        <div className="p-6 space-y-6">
-            <div className="p-4 bg-blue-50 text-blue-800 rounded-lg">
-                <h4 className="font-bold">Langkah 1: Buat Laporan (Aman)</h4>
-                <p className="text-sm">
-                  Klik tombol ini untuk membuat dan mengunduh laporan CSV autodebet. 
-                  <strong>Aksi ini tidak akan mengubah data apa pun di sistem.</strong>
-                </p>
-                <button 
-                  onClick={generateReport} 
-                  disabled={isLoading} 
-                  className="mt-3 px-6 py-2 bg-primary text-white font-semibold rounded-md hover:bg-lime-600 disabled:bg-gray-400"
-                >
-                    {isLoading && !processData ? 'Membuat Laporan...' : 'Buat & Unduh Laporan CSV'}
-                </button>
+                const simpananTransaksiRef = doc(collection(db, "anggota", item.anggota.id, "transaksi"));
+                batch.set(simpananTransaksiRef, {
+                    anggota_id: item.anggota.id,
+                    jenis: JenisSimpanan.WAJIB,
+                    tanggal: currentDate.toISOString(),
+                    tipe: 'Setor',
+                    jumlah: item.simpananWajib,
+                    keterangan: keteranganSimpanan,
+                } as Omit<TransaksiSimpanan, 'id'>);
+
+                for (const kontrak of item.kontrakList) {
+                    const kontrakRef = doc(db, "kontrak_murabahah", kontrak.id);
+                    const cicilanTerbayarBaru = kontrak.cicilan_terbayar + 1;
+                    const statusBaru = cicilanTerbayarBaru >= kontrak.tenor ? StatusKontrak.LUNAS : kontrak.status;
+
+                    batch.update(kontrakRef, {
+                        cicilan_terbayar: cicilanTerbayarBaru,
+                        status: statusBaru
+                    });
+                    
+                    // --- PERBAIKAN DI SINI ---
+                    const murabahahTransaksiRef = doc(collection(db, "kontrak_murabahah", kontrak.id, "transaksi"));
+                    batch.set(murabahahTransaksiRef, {
+                        tanggal: currentDate.toISOString(),
+                        jumlah: kontrak.cicilan_per_bulan, // Memastikan jumlah cicilan tercatat
+                        keterangan: `Angsuran ke-${cicilanTerbayarBaru} (${kontrak.nama_barang})`,
+                    } as Omit<TransaksiMurabahah, 'id'>);
+                }
+            }
+
+            // Arsipkan laporan
+            const arsipRef = doc(collection(db, "laporan_arsip"));
+            const reportForArchive: Omit<LaporanArsip, 'id'> = {
+                namaLaporan: `Laporan Autodebet - ${currentDate.toLocaleString('id-ID', { month: 'long', year: 'numeric' })}`,
+                tanggalDibuat: currentDate.toISOString(),
+                dataLaporan: processedData.flatMap(p => 
+                    p.kontrakList.length > 0
+                    ? p.kontrakList.map(k => ({
+                        nip: p.anggota.nip,
+                        nama: p.anggota.nama,
+                        simpananWajib: p.simpananWajib,
+                        cicilanMurabahah: k.cicilan_per_bulan,
+                        totalPotongan: p.simpananWajib + k.cicilan_per_bulan
+                    }))
+                    : [{
+                        nip: p.anggota.nip,
+                        nama: p.anggota.nama,
+                        simpananWajib: p.simpananWajib,
+                        cicilanMurabahah: 0,
+                        totalPotongan: p.simpananWajib
+                    }]
+                )
+            };
+            batch.set(arsipRef, reportForArchive);
+
+            await batch.commit();
+            alert("Proses bulanan berhasil diselesaikan dan laporan telah diarsipkan.");
+            setProcessedData(null); // Reset setelah berhasil
+
+        } catch (error) {
+            console.error("Gagal menjalankan proses bulanan: ", error);
+            alert("Terjadi kesalahan saat menjalankan proses bulanan.");
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    return (
+        <Card title="Proses Autodebet Bulanan & Pembuatan Laporan">
+            <div className="p-6 space-y-6">
+                <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                    <h4 className="font-semibold">Alur Proses Bulanan</h4>
+                    <p className="text-sm text-gray-600">
+                        <strong>Langkah 1:</strong> Klik tombol "Buat & Unduh Laporan CSV" untuk melihat pratinjau data yang akan diproses dan mengunduh filenya. Langkah ini aman dan tidak akan mengubah data.
+                    </p>
+                    <p className="text-sm text-gray-600">
+                        <strong>Langkah 2:</strong> Setelah laporan dibuat, tombol "Konfirmasi & Jalankan Proses" akan aktif. Klik tombol ini untuk memproses data secara permanen (menambah simpanan, angsuran, dan mengarsipkan laporan).
+                    </p>
+                </div>
+
+                <div className="flex justify-center space-x-4">
+                    <button onClick={generateReportData} disabled={isLoading} className="px-6 py-3 bg-primary text-white font-bold rounded-lg hover:bg-lime-600 disabled:bg-gray-400 shadow-lg">
+                        {isLoading ? 'Membuat...' : 'Buat & Unduh Laporan CSV'}
+                    </button>
+                    <button onClick={executeProcess} disabled={isLoading || !processedData} className="px-6 py-3 bg-secondary text-white font-bold rounded-lg hover:bg-orange-600 disabled:bg-gray-400 disabled:cursor-not-allowed shadow-lg">
+                        {isLoading ? 'Memproses...' : 'Konfirmasi & Jalankan Proses'}
+                    </button>
+                </div>
+
+                 {processedData && (
+                    <div className="p-4 bg-green-50 text-green-800 rounded-lg text-center">
+                        <p className="font-semibold">Laporan berhasil dibuat!</p>
+                        <p className="text-sm">Silakan periksa file CSV yang terunduh. Jika sudah sesuai, klik "Konfirmasi & Jalankan Proses".</p>
+                    </div>
+                )}
             </div>
-
-            {processData && (
-              <div className="p-4 bg-yellow-50 text-yellow-800 rounded-lg">
-                  <h4 className="font-bold">Langkah 2: Konfirmasi & Jalankan Proses (Permanen)</h4>
-                  <p className="text-sm">
-                    Laporan telah dibuat. Klik tombol di bawah untuk menyimpan perubahan simpanan dan angsuran ke database, serta mengarsipkan laporan ini. 
-                    <strong>Aksi ini bersifat permanen.</strong>
-                  </p>
-                  <button 
-                    onClick={executeProcess} 
-                    disabled={isLoading} 
-                    className="mt-3 px-6 py-2 bg-secondary text-white font-semibold rounded-md hover:bg-orange-600 disabled:bg-gray-400"
-                  >
-                      {isLoading ? 'Memproses...' : 'Konfirmasi & Jalankan Proses Bulanan'}
-                  </button>
-              </div>
-            )}
-        </div>
-    </Card>
-  );
+        </Card>
+    );
 };
 
 export default MonthlyProcess;
+
+
 
 
 
