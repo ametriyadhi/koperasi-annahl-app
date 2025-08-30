@@ -4,12 +4,13 @@ import { db } from '../firebase';
 import type { TransaksiMurabahah, KontrakMurabahah } from '../types';
 
 const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(value);
+    // Pengaman tambahan untuk memastikan value adalah angka
+    const numValue = Number(value) || 0;
+    return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(numValue);
 };
 
 interface MurabahahHistoryProps {
     kontrak: KontrakMurabahah;
-    // Jadikan onEdit dan onDelete opsional
     onEdit?: (kontrak: KontrakMurabahah) => void;
     onDelete?: (id: string) => void;
 }
@@ -19,7 +20,6 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // Pengaman jika kontrak atau id tidak ada
         if (!kontrak?.id) {
             setLoading(false);
             return;
@@ -27,14 +27,19 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
         
         const q = query(collection(db, "kontrak_murabahah", kontrak.id, "transaksi"), orderBy("tanggal", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const transactions = snapshot.docs.map(doc => doc.data() as TransaksiMurabahah);
+            // --- PERBAIKAN DI SINI ---
+            // Mengambil data dan ID dokumen secara eksplisit untuk memastikan semua field ada
+            const transactions = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })) as TransaksiMurabahah[];
             setTransaksiList(transactions);
             setLoading(false);
         });
         return () => unsubscribe();
     }, [kontrak?.id]);
 
-    const showActions = onEdit && onDelete; // Tampilkan aksi hanya jika fungsi onEdit dan onDelete diberikan
+    const showActions = onEdit && onDelete;
 
     return (
         <div>
@@ -49,7 +54,7 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
                             <tr>
                                 <th className="py-1 font-medium">Tanggal</th>
                                 <th className="py-1 font-medium text-right">Jumlah</th>
-                                <th className="py-1 font-medium">Keterangan</th>
+                                <th className="py-1 font-medium pl-2">Keterangan</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -64,7 +69,6 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
                     </table>
                 )}
             </div>
-            {/* Tampilkan footer HANYA jika ini adalah view admin */}
             {showActions && (
                  <div className="bg-gray-50 p-3 flex justify-end space-x-3 rounded-b-lg">
                     <button onClick={() => onEdit?.(kontrak)} className="px-4 py-2 bg-yellow-500 text-white text-xs font-bold rounded-md hover:bg-yellow-600">
@@ -80,6 +84,8 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
 };
 
 export default MurabahahHistory;
+
+
 
 
 
