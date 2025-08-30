@@ -27,8 +27,6 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
         
         const q = query(collection(db, "kontrak_murabahah", kontrak.id, "transaksi"), orderBy("tanggal", "desc"));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            // --- PERBAIKAN DI SINI ---
-            // Mengambil data dan ID dokumen secara eksplisit untuk memastikan semua field ada
             const transactions = snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
@@ -84,8 +82,5 @@ const MurabahahHistory: React.FC<MurabahahHistoryProps> = ({ kontrak, onEdit, on
 };
 
 export default MurabahahHistory;
-
-
-
 
 
