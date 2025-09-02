@@ -142,3 +142,18 @@ export const LogoIcon: React.FC<IconProps> = ({ className = 'w-10 h-10' }) => (
     </div>
   </div>
 );
+
+export const ArrowUpIcon: React.FC<IconProps> = ({ className = 'w-4 h-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="m5 12 7-7 7 7"/>
+    <path d="M12 19V5"/>
+  </svg>
+);
+
+export const ArrowDownIcon: React.FC<IconProps> = ({ className = 'w-4 h-4' }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+    <path d="M12 5v14"/>
+    <path d="m19 12-7 7-7-7"/>
+  </svg>
+);
+
