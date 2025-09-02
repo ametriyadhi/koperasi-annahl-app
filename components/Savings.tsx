@@ -86,7 +86,8 @@ const Savings: React.FC = () => {
 
                 if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
                 if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
-                return 0;
+                // Jika nilai sama, urutkan berdasarkan nama sebagai secondary sort
+                return a.nama.localeCompare(b.nama);
             });
         }
         return filterableAnggota;
@@ -122,18 +123,80 @@ const Savings: React.FC = () => {
         document.body.removeChild(link);
     };
 
-
-    // Fungsi lama untuk transaksi manual (tidak diubah)
+    // --- FUNGSI TRANSAKSI MANUAL YANG DIKEMBALIKAN ---
     const handleOpenModal = (transaksi: TransaksiSimpanan | null = null) => {
         setEditingTransaksi(transaksi);
         setIsModalOpen(true);
     };
     const handleCloseModal = () => { setIsModalOpen(false); setEditingTransaksi(null); };
     const handleSaveTransaksi = async (transaksiData: Omit<TransaksiSimpanan, 'id' | 'anggota_id' | 'tanggal'>) => {
-        // ... (logika simpan transaksi tetap sama)
+        if (!selectedAnggota) return;
+
+        const memberRef = doc(db, "anggota", selectedAnggota.id);
+        const transaksiCol = collection(db, "anggota", selectedAnggota.id, "transaksi");
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const memberDoc = await transaction.get(memberRef);
+                if (!memberDoc.exists()) throw new Error("Anggota tidak ditemukan!");
+                const currentData = memberDoc.data() as Anggota;
+
+                const fieldMap: Record<JenisSimpanan, keyof Anggota> = {
+                    [JenisSimpanan.POKOK]: 'simpanan_pokok',
+                    [JenisSimpanan.WAJIB]: 'simpanan_wajib',
+                    [JenisSimpanan.SUKARELA]: 'simpanan_sukarela',
+                };
+
+                const fieldToUpdate = fieldMap[transaksiData.jenis];
+                const currentBalance = currentData[fieldToUpdate] as number || 0;
+                let newBalance = currentBalance;
+                newBalance += transaksiData.tipe === 'Setor' ? transaksiData.jumlah : -transaksiData.jumlah;
+                if (newBalance < 0) throw new Error("Saldo tidak mencukupi!");
+
+                transaction.update(memberRef, { [fieldToUpdate]: newBalance });
+                const newTransaksiRef = doc(transaksiCol);
+                transaction.set(newTransaksiRef, {
+                    ...transaksiData,
+                    anggota_id: selectedAnggota.id,
+                    tanggal: new Date().toISOString(),
+                });
+            });
+            handleCloseModal();
+        } catch (error: any) {
+            console.error("Gagal menyimpan transaksi: ", error);
+            alert(`Error: ${error.message}`);
+        }
     };
      const handleDeleteTransaksi = async (transaksi: TransaksiSimpanan) => {
-        // ... (logika hapus transaksi tetap sama)
+        if (!selectedAnggota || !confirm(`Yakin ingin menghapus transaksi "${transaksi.keterangan}"? Aksi ini akan mengubah saldo.`)) return;
+
+        const memberRef = doc(db, "anggota", selectedAnggota.id);
+        const transaksiRef = doc(db, "anggota", selectedAnggota.id, "transaksi", transaksi.id);
+
+        try {
+            await runTransaction(db, async (transaction) => {
+                const memberDoc = await transaction.get(memberRef);
+                if (!memberDoc.exists()) throw new Error("Anggota tidak ditemukan!");
+
+                const currentData = memberDoc.data() as Anggota;
+                const fieldMap: Record<JenisSimpanan, keyof Anggota> = {
+                    [JenisSimpanan.POKOK]: 'simpanan_pokok',
+                    [JenisSimpanan.WAJIB]: 'simpanan_wajib',
+                    [JenisSimpanan.SUKARELA]: 'simpanan_sukarela',
+                };
+                
+                const fieldToUpdate = fieldMap[transaksi.jenis];
+                let currentBalance = currentData[fieldToUpdate] as number || 0;
+                currentBalance += transaksi.tipe === 'Tarik' ? transaksi.jumlah : -transaksi.jumlah;
+                if (currentBalance < 0) throw new Error("Saldo menjadi negatif setelah penghapusan!");
+
+                transaction.update(memberRef, { [fieldToUpdate]: currentBalance });
+                transaction.delete(transaksiRef);
+            });
+        } catch (error: any) {
+            console.error("Gagal menghapus transaksi: ", error);
+            alert(`Error: ${error.message}`);
+        }
     };
 
 
@@ -237,7 +300,6 @@ const Savings: React.FC = () => {
             {activeTab === 'Transaksi Manual' && (
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="md:col-span-1">
-                        {/* Tampilan pilih anggota seperti sebelumnya */}
                         <Card title="Pilih Anggota">
                             <div className="p-4 border-b">
                                 <input
@@ -264,7 +326,6 @@ const Savings: React.FC = () => {
                         </Card>
                     </div>
                     <div className="md:col-span-2">
-                        {/* Tampilan detail simpanan seperti sebelumnya */}
                         {selectedAnggota ? (
                             <div className="space-y-6">
                                 <Card>
@@ -292,7 +353,7 @@ const Savings: React.FC = () => {
                                 <Card title="Riwayat Transaksi">
                                     {loading.transaksi ? <p className="p-4">Memuat riwayat...</p> : (
                                         <div className="overflow-x-auto">
-                                            <table className="min-w-full divide-y divide-gray-200">
+                                             <table className="min-w-full divide-y divide-gray-200">
                                                 <thead className="bg-gray-50">
                                                     <tr>
                                                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
@@ -340,7 +401,4 @@ const Savings: React.FC = () => {
 };
 
 export default Savings;
-
-
-
 
