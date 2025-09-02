@@ -292,7 +292,34 @@ const Savings: React.FC = () => {
                                 <Card title="Riwayat Transaksi">
                                     {loading.transaksi ? <p className="p-4">Memuat riwayat...</p> : (
                                         <div className="overflow-x-auto">
-                                            {/* ... tabel riwayat transaksi ... */}
+                                            <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Jenis</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Keterangan</th>
+                                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {transaksiList.map(t => (
+                                                        <tr key={t.id}>
+                                                            <td className="px-4 py-2 text-sm">{new Date(t.tanggal).toLocaleDateString('id-ID')}</td>
+                                                            <td className="px-4 py-2 text-sm text-gray-600">{t.jenis}</td>
+                                                            <td className="px-4 py-2 text-sm text-gray-600">{t.keterangan}</td>
+                                                            <td className={`px-4 py-2 text-sm text-right font-semibold ${t.tipe === 'Setor' ? 'text-green-600' : 'text-red-600'}`}>
+                                                                {t.tipe === 'Tarik' && '- '}{formatCurrency(t.jumlah)}
+                                                            </td>
+                                                            <td className="px-4 py-2 text-right text-sm space-x-2">
+                                                                <button onClick={() => handleOpenModal(t)} className="text-primary hover:text-amber-600">Edit</button>
+                                                                <button onClick={() => handleDeleteTransaksi(t)} className="text-red-600 hover:text-red-800">Hapus</button>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                            {transaksiList.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada transaksi.</p>}
                                         </div>
                                     )}
                                 </Card>
