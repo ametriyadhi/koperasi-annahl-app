@@ -195,8 +195,8 @@ const Savings: React.FC = () => {
 
     const renderSortIcon = (key: keyof Anggota | 'total_simpanan') => {
         if (!sortConfig || sortConfig.key !== key) return null;
-        if (sortConfig.direction === 'ascending') return <ArrowUpIcon className="inline ml-1" />;
-        return <ArrowDownIcon className="inline ml-1" />;
+        if (sortConfig.direction === 'ascending') return <ArrowUpIcon className="inline ml-1 w-4 h-4" />;
+        return <ArrowDownIcon className="inline ml-1 w-4 h-4" />;
     };
 
     return (
@@ -205,7 +205,7 @@ const Savings: React.FC = () => {
             <div className="mb-6 border-b border-gray-200">
                 <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                     {(['Data Simpanan', 'Transaksi Manual'] as SavingsTab[]).map((tab) => (
-                        <button key={tab} onClick={() => setActiveTab(tab)} className={`shrink-0 ${activeTab === tab ? 'border-primary text-primary' : '...'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>{tab}</button>
+                        <button key={tab} onClick={() => setActiveTab(tab)} className={`shrink-0 ${activeTab === tab ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors`}>{tab}</button>
                     ))}
                 </nav>
             </div>
@@ -215,8 +215,8 @@ const Savings: React.FC = () => {
                     <div className="p-4 sm:p-6 border-b">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                              <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                                <input type="text" placeholder="Cari nama anggota..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 p-2 border rounded-md" />
-                                <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-full md:w-48 p-2 border rounded-md bg-white">
+                                <input type="text" placeholder="Cari nama anggota..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full md:w-64 p-2 border border-gray-300 rounded-md" />
+                                <select value={unitFilter} onChange={(e) => setUnitFilter(e.target.value)} className="w-full md:w-48 p-2 border border-gray-300 rounded-md bg-white">
                                     <option value="Semua">Semua Unit</option>
                                     {Object.values(Unit).map(u => <option key={u} value={u}>{u}</option>)}
                                 </select>
@@ -228,25 +228,25 @@ const Savings: React.FC = () => {
                         <table className="min-w-full divide-y divide-gray-200">
                              <thead className="bg-gray-50">
                                 <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase"><button onClick={() => requestSort('nip')} className="flex items-center">NIP {renderSortIcon('nip')}</button></th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase"><button onClick={() => requestSort('nama')} className="flex items-center">Nama {renderSortIcon('nama')}</button></th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase"><button onClick={() => requestSort('unit')} className="flex items-center">Unit {renderSortIcon('unit')}</button></th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase"><button onClick={() => requestSort('simpanan_pokok')} className="w-full flex justify-end items-center">Pokok {renderSortIcon('simpanan_pokok')}</button></th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase"><button onClick={() => requestSort('simpanan_wajib')} className="w-full flex justify-end items-center">Wajib {renderSortIcon('simpanan_wajib')}</button></th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase"><button onClick={() => requestSort('simpanan_sukarela')} className="w-full flex justify-end items-center">Sukarela {renderSortIcon('simpanan_sukarela')}</button></th>
-                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase"><button onClick={() => requestSort('total_simpanan')} className="w-full flex justify-end items-center">Total {renderSortIcon('total_simpanan')}</button></th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('nip')} className="flex items-center">NIP {renderSortIcon('nip')}</button></th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('nama')} className="flex items-center">Nama {renderSortIcon('nama')}</button></th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('unit')} className="flex items-center">Unit {renderSortIcon('unit')}</button></th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('simpanan_pokok')} className="w-full flex justify-end items-center">Pokok {renderSortIcon('simpanan_pokok')}</button></th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('simpanan_wajib')} className="w-full flex justify-end items-center">Wajib {renderSortIcon('simpanan_wajib')}</button></th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('simpanan_sukarela')} className="w-full flex justify-end items-center">Sukarela {renderSortIcon('simpanan_sukarela')}</button></th>
+                                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider"><button onClick={() => requestSort('total_simpanan')} className="w-full flex justify-end items-center">Total {renderSortIcon('total_simpanan')}</button></th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
                                 {sortedAndFilteredAnggota.map((a) => (
                                     <tr key={a.id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-2 text-sm">{a.nip}</td>
-                                        <td className="px-4 py-2 text-sm font-medium">{a.nama}</td>
-                                        <td className="px-4 py-2 text-sm">{a.unit}</td>
-                                        <td className="px-4 py-2 text-sm text-right">{formatCurrency(a.simpanan_pokok || 0)}</td>
-                                        <td className="px-4 py-2 text-sm text-right">{formatCurrency(a.simpanan_wajib || 0)}</td>
-                                        <td className="px-4 py-2 text-sm text-right">{formatCurrency(a.simpanan_sukarela || 0)}</td>
-                                        <td className="px-4 py-2 text-sm text-right font-bold">{formatCurrency((a.simpanan_pokok || 0) + (a.simpanan_wajib || 0) + (a.simpanan_sukarela || 0))}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{a.nip}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{a.nama}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{a.unit}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{formatCurrency(a.simpanan_pokok || 0)}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{formatCurrency(a.simpanan_wajib || 0)}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{formatCurrency(a.simpanan_sukarela || 0)}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-bold">{formatCurrency((a.simpanan_pokok || 0) + (a.simpanan_wajib || 0) + (a.simpanan_sukarela || 0))}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -274,7 +274,7 @@ const Savings: React.FC = () => {
                             {loading.anggota ? <p className="p-4">Memuat...</p> : (
                                 <ul className="max-h-96 overflow-y-auto">
                                     {anggotaList.filter(a=>a.nama.toLowerCase().includes(searchTerm.toLowerCase())).map(anggota => (
-                                        <li key={anggota.id}><button onClick={() => setSelectedAnggota(anggota)} className={`w-full text-left p-3 text-sm ${selectedAnggota?.id === anggota.id ? 'bg-primary text-white' : '...'}`}>{anggota.nama}</button></li>
+                                        <li key={anggota.id}><button onClick={() => setSelectedAnggota(anggota)} className={`w-full text-left p-3 text-sm ${selectedAnggota?.id === anggota.id ? 'bg-primary text-white' : 'hover:bg-gray-100'}`}>{anggota.nama}</button></li>
                                     ))}
                                 </ul>
                             )}
@@ -285,44 +285,52 @@ const Savings: React.FC = () => {
                             <div className="space-y-6">
                                 <Card>
                                     <div className="p-4 sm:p-6 border-b flex justify-between items-center">
-                                        <h3>Rekening - {selectedAnggota.nama}</h3>
-                                        <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-secondary text-white text-sm rounded-md">+ Transaksi Baru</button>
+                                        <h3 className="text-lg font-semibold text-gray-800">Rekening - {selectedAnggota.nama}</h3>
+                                        <button onClick={() => handleOpenModal()} className="px-4 py-2 bg-secondary text-white text-sm font-medium rounded-md hover:bg-orange-600">+ Transaksi Baru</button>
                                     </div>
                                     <div className="p-4 sm:p-6 space-y-4">
-                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between">
-                                            <p>Simpanan Pokok</p><p>{formatCurrency(selectedAnggota.simpanan_pokok || 0)}</p>
+                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between items-center">
+                                            <p className="font-semibold text-gray-700">Simpanan Pokok</p><p className="text-lg font-bold text-primary">{formatCurrency(selectedAnggota.simpanan_pokok || 0)}</p>
                                         </div>
-                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between">
-                                            <p>Simpanan Wajib</p><p>{formatCurrency(selectedAnggota.simpanan_wajib || 0)}</p>
+                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between items-center">
+                                            <p className="font-semibold text-gray-700">Simpanan Wajib</p><p className="text-lg font-bold text-primary">{formatCurrency(selectedAnggota.simpanan_wajib || 0)}</p>
                                         </div>
-                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between">
-                                            <p>Simpanan Sukarela</p><p>{formatCurrency(selectedAnggota.simpanan_sukarela || 0)}</p>
+                                        <div className="p-4 bg-gray-50 rounded-lg flex justify-between items-center">
+                                            <p className="font-semibold text-gray-700">Simpanan Sukarela</p><p className="text-lg font-bold text-primary">{formatCurrency(selectedAnggota.simpanan_sukarela || 0)}</p>
                                         </div>
                                     </div>
                                 </Card>
                                 <Card title="Riwayat Transaksi">
                                     {loading.transaksi ? <p className="p-4">Memuat...</p> : (
                                         <div className="overflow-x-auto">
-                                             <table className="min-w-full divide-y">
-                                                <thead><tr><th>...</th></tr></thead>
-                                                <tbody>
+                                             <table className="min-w-full divide-y divide-gray-200">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tanggal</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Jenis</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Keterangan</th>
+                                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Jumlah</th>
+                                                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Aksi</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-200">
                                                     {transaksiList.map(t => (
                                                         <tr key={t.id}>
-                                                            <td>{new Date(t.tanggal).toLocaleDateString('id-ID')}</td>
-                                                            <td>{t.jenis}</td>
-                                                            <td>{t.keterangan}</td>
-                                                            <td className={t.tipe === 'Setor' ? 'text-green-600' : 'text-red-600'}>
+                                                            <td className="px-4 py-2 text-sm">{new Date(t.tanggal).toLocaleDateString('id-ID')}</td>
+                                                            <td className="px-4 py-2 text-sm text-gray-600">{t.jenis}</td>
+                                                            <td className="px-4 py-2 text-sm text-gray-600">{t.keterangan}</td>
+                                                            <td className={`px-4 py-2 text-sm text-right font-semibold ${t.tipe === 'Setor' ? 'text-green-600' : 'text-red-600'}`}>
                                                                 {t.tipe === 'Tarik' && '- '}{formatCurrency(t.jumlah)}
                                                             </td>
-                                                            <td>
-                                                                <button onClick={() => handleOpenModal(t)}>Edit</button>
-                                                                <button onClick={() => handleDeleteTransaksi(t)}>Hapus</button>
+                                                            <td className="px-4 py-2 text-right text-sm space-x-2">
+                                                                <button onClick={() => handleOpenModal(t)} className="text-primary hover:text-amber-600" disabled>Edit</button>
+                                                                <button onClick={() => handleDeleteTransaksi(t)} className="text-red-600 hover:text-red-800">Hapus</button>
                                                             </td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                             </table>
-                                            {transaksiList.length === 0 && <p className="text-center py-4">Belum ada transaksi.</p>}
+                                            {transaksiList.length === 0 && <p className="text-center text-gray-500 py-4">Belum ada transaksi.</p>}
                                         </div>
                                     )}
                                 </Card>
@@ -341,6 +349,4 @@ const Savings: React.FC = () => {
 };
 
 export default Savings;
-
-
 
